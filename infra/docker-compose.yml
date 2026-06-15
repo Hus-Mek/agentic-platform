@@ -1,0 +1,115 @@
+version: "3.9"
+
+x-postgres-env: &postgres-env
+  POSTGRES_USER: ${POSTGRES_USER:-postgres}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+  POSTGRES_DB: ${POSTGRES_DB:-agenticos}
+
+x-postgres-url: &postgres-url
+  DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-agenticos}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agenticos-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      <<: *postgres-env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agenticos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.0
+    container_name: agenticos-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    restart: unless-stopped
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-v1.60.0
+    container_name: agenticos-litellm
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      LITELLM_CONFIG_FILE: /app/config.yaml
+    command: ["--port", "4000", "--config", "/app/config.yaml", "--detailed_logging"]
+    restart: unless-stopped
+
+  langfuse:
+    image: langfuse/langfuse:3.36.0
+    container_name: agenticos-langfuse
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/langfuse
+      DIRECT_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/langfuse
+      NEXTAUTH_SECRET: ${LANGFUSE_SECRET:-langfuse-secret-change-me}
+      SALT: ${LANGFUSE_SALT:-langfuse-salt-change-me}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-server:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: agenticos-api-server
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *postgres-url
+      QDRANT_URL: http://qdrant:6333
+      LITELLM_URL: http://litellm:4000
+      LANGFUSE_URL: http://langfuse:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-00000000-0000-0000-0000-000000000000}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-00000000-0000-0000-0000-000000000000}
+      RUST_LOG: ${RUST_LOG:-info}
+      RUST_BACKTRACE: ${RUST_BACKTRACE:-0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      litellm:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: agenticos-frontend
+    ports:
+      - "3001:3001"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_LANGFUSE_URL: http://localhost:3000
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      - api-server
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  qdrant-data:

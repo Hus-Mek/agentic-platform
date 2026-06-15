@@ -1,0 +1,16 @@
+[package]
+name = "agenticos-memory"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+agenticos-core = { path = "../core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+qdrant-client = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+reqwest = { workspace = true }

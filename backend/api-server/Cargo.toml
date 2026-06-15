@@ -1,0 +1,28 @@
+[package]
+name = "agenticos-api-server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+agenticos-core = { path = "../core" }
+agenticos-agent-runtime = { path = "../agent-runtime" }
+agenticos-guards = { path = "../guards" }
+agenticos-memory = { path = "../memory" }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { version = "0.1", features = ["sync"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sqlx = { workspace = true, features = ["migrate"] }
+jsonwebtoken = { workspace = true }
+bcrypt = { workspace = true }
+dotenvy = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+reqwest = { workspace = true }

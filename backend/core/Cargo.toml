@@ -1,0 +1,15 @@
+[package]
+name = "agenticos-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+schemars = { workspace = true }
+derive_builder = { workspace = true }
+reqwest = { workspace = true }
