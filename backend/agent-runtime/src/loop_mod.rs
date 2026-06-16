@@ -6,6 +6,7 @@ use crate::memory_extractor;
 use crate::plan::{plan_step, LiteLLMClient, PlanResult};
 use crate::rag::KbRetriever;
 use crate::tool::ToolRegistry;
+use crate::context::{ContextConfig, ContextManager};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -78,6 +79,10 @@ async fn run_inner(
     db: &PgPool,
 ) -> anyhow::Result<()> {
     while !state.should_stop() {
+        // Context window management: prune messages if approaching limit
+        let context_mgr = ContextManager::new(ContextConfig::default());
+        context_mgr.maybe_prune(&mut state.messages);
+
         if state.memory_config.enabled {
             let query = state
                 .messages

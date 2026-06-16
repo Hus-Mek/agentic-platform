@@ -10,6 +10,7 @@ use crate::evaluate::evaluate_step;
 use crate::plan::{plan_step, LiteLLMClient, PlanResult};
 use crate::rag::KbRetriever;
 use crate::tool::ToolRegistry;
+use crate::context::{ContextConfig, ContextManager};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum StreamEvent {
@@ -96,6 +97,10 @@ async fn run_inner(
     let flush_interval = Duration::from_millis(50);
 
     while !state.should_stop() {
+        // Context window management: prune messages if approaching limit
+        let context_mgr = ContextManager::new(ContextConfig::default());
+        context_mgr.maybe_prune(&mut state.messages);
+
         let tokens_before = state.total_tokens_used;
         let plan_start = std::time::Instant::now();
         let plan_result = plan_step(state, llm_client, memory_client, kb_retriever).await?;

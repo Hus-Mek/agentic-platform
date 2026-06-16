@@ -1,3 +1,4 @@
+pub mod context;
 pub mod error;
 pub mod evaluate;
 pub mod loop_mod;
@@ -10,6 +11,7 @@ pub mod responder;
 pub mod streaming;
 pub mod tool;
 
+pub use context::{ContextConfig, ContextManager};
 pub use loop_mod::run_agent;
 pub use orchestrator::{collect_team_stats, create_delegate_tool, TeamOrchestrator};
 pub use plan::{LiteLLMClient, LlmResponse, LlmUsage, PlanResult};
