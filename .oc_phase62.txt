@@ -1,0 +1,45 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement cost tracking and budget enforcement.
+
+Read these files first:
+- agent-runtime/src/loop_mod.rs
+- api-server/src/routes/ (list files to see existing routes)
+- api-server/src/lib.rs
+- core/src/config.rs
+
+Then:
+
+1. CREATE infra/migrations/0006_workspace_usage.sql:
+```sql
+CREATE TABLE IF NOT EXISTS workspace_usage (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id UUID NOT NULL REFERENCES workspaces(id),
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    total_tokens BIGINT NOT NULL DEFAULT 0,
+    total_cost DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now(),
+    UNIQUE(workspace_id, date)
+);
+```
+
+2. CREATE api-server/src/routes/usage.rs:
+- `GET /api/usage/:workspace_id` — daily usage for a workspace
+- `GET /api/usage/:workspace_id/summary` — aggregated stats
+- Use sqlx queries against workspace_usage table
+
+3. MODIFY api-server/src/lib.rs:
+- Register usage routes
+
+4. MODIFY agent-runtime/src/loop_mod.rs:
+- After each LLM call, record usage (tokens, cost) to workspace_usage table
+- Check budget before each LLM call: if budget exceeded, stop agent
+- Add `StreamEvent::BudgetExceeded` variant
+
+5. MODIFY core/src/config.rs:
+- Add `daily_budget: f64` to workspace config
+
+6. Verify: cargo check --workspace
+7. Commit: git add -A && git commit -m "feat: cost tracking and budget enforcement"
+
+Working directory: C:\Users\USER/agentic-platform/backend

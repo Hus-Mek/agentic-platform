@@ -202,7 +202,7 @@ async fn run_inner(
 
                     let exec_start = std::time::Instant::now();
                     let exec_result = tool_registry
-                        .execute(
+                        .execute_with_retry(
                             &mut core_tc,
                             state.workspace_id.as_deref(),
                             state.run_id.as_deref(),

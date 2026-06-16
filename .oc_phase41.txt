@@ -1,0 +1,45 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement tiered memory architecture.
+
+Read these files first:
+- memory/src/lib.rs
+- memory/src/store.rs
+- memory/src/entities.rs (if exists)
+- agent-runtime/src/loop_mod.rs (to see how memory is used)
+- core/src/state.rs
+
+Then:
+
+1. CREATE memory/src/tiers.rs:
+- `MemoryTier` enum: Working, Recall, Archival
+- `TieredMemoryManager` struct with methods:
+  - `store(fact, tier)` — store fact in appropriate tier
+  - `retrieve(query, tier)` — retrieve from specific tier
+  - `consolidate()` — move aging recall -> archival
+  - `deduplicate(fact)` — check if similar fact exists (cosine similarity > 0.9)
+- Working memory: in-memory HashMap, cleared after run
+- Recall memory: Qdrant with time-based filtering (last 7 days)
+- Archival memory: Qdrant with entity linking
+
+2. CREATE memory/src/entities.rs:
+- `Entity` struct with name, type, facts
+- `EntityLinker` that extracts entities from facts and links related facts
+
+3. CREATE memory/src/consolidation.rs:
+- `MemoryConsolidation` with `consolidate_aging_facts()` method
+- Periodically moves recall -> archival based on age
+
+4. MODIFY memory/src/store.rs:
+- Add tier-aware storage/retrieval
+
+5. MODIFY memory/src/lib.rs:
+- Export new types
+
+6. MODIFY agent-runtime/src/loop_mod.rs:
+- Use tiered memory instead of flat memory_client
+
+7. CREATE memory/tests/tier_tests.rs
+
+8. Verify: cargo check --workspace
+9. Commit: git add -A && git commit -m "feat: tiered memory architecture with consolidation"
+
+Working directory: C:\Users\USER/agentic-platform/backend

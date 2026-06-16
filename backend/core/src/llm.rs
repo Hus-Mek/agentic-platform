@@ -1,10 +1,11 @@
 use crate::config::AppConfig;
 use crate::error::{AgentError, Result};
 use crate::state::{Message, ToolCall, ToolDefinition};
+use crate::llm_provider::{LlmProvider, ProviderKind, detect_provider};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
-pub struct LiteLLMClient {
+pub struct LlmClient {
     client: reqwest::Client,
     base_url: String,
     api_key: String,
@@ -126,33 +127,7 @@ struct ChatToolFunction {
     parameters: serde_json::Value,
 }
 
-impl LiteLLMClient {
-    pub fn new(config: &AppConfig) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(300))
-            .build()
-            .expect("Failed to create HTTP client");
-
-        Self {
-            client,
-            base_url: config.llm_base_url.clone(),
-            api_key: config.llm_api_key.clone(),
-        }
-    }
-
-    pub fn new_from_url(base_url: &str, api_key: &str) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(300))
-            .build()
-            .expect("Failed to create HTTP client");
-
-        Self {
-            client,
-            base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: api_key.to_string(),
-        }
-    }
-
+impl LlmClient {
     fn convert_messages(messages: &[Message]) -> Vec<ChatMessage> {
         messages
             .iter()
@@ -200,7 +175,33 @@ impl LiteLLMClient {
             .collect()
     }
 
-    pub async fn chat_completion(
+    pub fn new(config: &AppConfig) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .expect("Failed to create HTTP client");
+
+        Self {
+            client,
+            base_url: config.llm_base_url.clone(),
+            api_key: config.llm_api_key.clone(),
+        }
+    }
+
+    pub fn new_from_url(base_url: &str, api_key: &str) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .expect("Failed to create HTTP client");
+
+        Self {
+            client,
+            base_url: base_url.trim_end_matches('/').to_string(),
+            api_key: api_key.to_string(),
+        }
+    }
+
+    pub async fn chat_completion_impl(
         &self,
         model: &str,
         messages: &[Message],
@@ -277,6 +278,15 @@ impl LiteLLMClient {
         })
     }
 
+    pub async fn chat_completion(
+        &self,
+        model: &str,
+        messages: &[Message],
+        tools: &[ToolDefinition],
+    ) -> Result<LlmResponse> {
+        self.chat_completion_impl(model, messages, tools).await
+    }
+
     pub async fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let url = format!("{}/v1/embeddings", self.base_url);
         let body = serde_json::json!({
@@ -345,6 +355,19 @@ impl LiteLLMClient {
         Ok(response)
     }
 }
+
+impl LlmProvider for LlmClient {
+    async fn chat_completion(
+        &self,
+        model: &str,
+        messages: &[Message],
+        tools: &[ToolDefinition],
+    ) -> crate::error::Result<LlmResponse> {
+        self.chat_completion(model, messages, tools).await
+    }
+}
+
+pub type LiteLLMClient = LlmClient;
 
 fn calculate_cost(model: &str, prompt_tokens: u32, completion_tokens: u32) -> f64 {
     let (prompt_rate, completion_rate) = match model {

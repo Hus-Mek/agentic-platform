@@ -1,0 +1,30 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, fix the 14 failing security tests in agent-runtime/tests/security_tests.rs.
+
+Read the file first. The failures are:
+- test_cascading_failure_detection
+- test_goal_hijacking_detection
+- test_human_trust_manipulation_bypass_guard
+- test_human_trust_manipulation_skip_approval
+- test_insecure_inter_agent_behavior_change
+- test_memory_poisoning_detection
+- test_pii_detection_api_key
+- test_privilege_escalation_path_traversal
+- test_privilege_escalation_safe_path_passes
+- test_rogue_agent_override_config
+- test_rogue_agent_self_modification
+- test_tool_misuse_excessive_calls
+- test_tool_misuse_rm_rf_blocked
+- test_tool_misuse_suspicious_args
+
+These tests use guard policies from the partial Phase 7 implementation. The policies exist but their detection logic may not match what the tests expect.
+
+For each failing test:
+1. Read the test to understand what it expects
+2. Read the corresponding policy in guards/src/inspector.rs to see what it actually does
+3. Either fix the policy to match the test expectation, or fix the test to match the policy behavior
+4. The goal is to make all tests pass without changing the test intent
+
+Run: cargo test -p agenticos-agent-runtime --test security_tests
+Commit: git add -A && git commit -m "fix: align guard policies with security test expectations"
+
+Working directory: C:\Users\USER/agentic-platform/backend

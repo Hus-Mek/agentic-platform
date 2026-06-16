@@ -1,0 +1,35 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement multi-step planning with replanning.
+
+Read these files first:
+- agent-runtime/src/plan.rs
+- agent-runtime/src/planner.rs (if exists)
+- agent-runtime/src/orchestrator.rs
+- core/src/state.rs (for AgentState)
+
+Then:
+
+1. MODIFY agent-runtime/src/plan.rs:
+- Add a `PlanStep` struct with fields: `id: String, description: String, status: PlanStepStatus, tool_call: Option<ToolCall>, result: Option<String>`
+- Add `PlanStepStatus` enum: `Pending, InProgress, Completed, Failed, Replanned`
+- Add `PlanExecution` struct with steps and current_index
+
+2. CREATE agent-runtime/src/plan_executor.rs:
+- `execute_plan()` function that runs plan steps sequentially
+- After each step, check if result matches expectations
+- On failure: replan from the failed step (with context about what went wrong)
+- Max replan attempts: 3
+- Emit UDM events for each step
+
+3. MODIFY agent-runtime/src/tool.rs:
+- Register a new `execute_plan` tool that uses PlanExecution
+
+4. MODIFY agent-runtime/src/loop_mod.rs:
+- Handle the plan execution flow in the main loop
+
+5. CREATE agent-runtime/tests/plan_executor_tests.rs with tests
+
+6. Verify: cargo check --workspace
+7. Verify: cargo test -p agenticos-agent-runtime --lib
+8. Commit: git add -A && git commit -m "feat: multi-step planning with replanning"
+
+Working directory: C:\Users\USER/agentic-platform/backend

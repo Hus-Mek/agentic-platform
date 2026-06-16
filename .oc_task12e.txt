@@ -1,0 +1,11 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, make these small changes:
+
+1. In agent-runtime/src/loop_mod.rs, find the line `let exec_result = tool_registry` inside the `run_inner` function's while loop (around line 203). Change `.execute(` to `.execute_with_retry(`
+
+2. In agent-runtime/src/streaming.rs, find the same pattern inside its `run_inner` function's while loop (around line 213). Change `.execute(` to `.execute_with_retry(`
+
+3. Run: cargo check --workspace
+4. Run: cargo test -p agenticos-agent-runtime --lib
+5. Commit: git add -A && git commit -m "feat: use execute_with_retry in loop and streaming paths"
+
+Working directory: C:\Users\USER/agentic-platform/backend
