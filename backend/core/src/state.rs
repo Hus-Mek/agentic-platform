@@ -222,6 +222,77 @@ impl AgentState {
     }
 }
 
+// ── Recovery types (error classification + circuit breaker) ──────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryConfig {
+    pub max_retries: u32,
+    pub base_delay_ms: u64,
+    pub max_delay_ms: u64,
+    pub max_consecutive_failures: u32,
+}
+
+impl Default for RecoveryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            base_delay_ms: 1000,
+            max_delay_ms: 32000,
+            max_consecutive_failures: 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RecoveryAction {
+    Retry(u64),     // delay_ms before retry
+    Fail(String),    // permanent failure message
+    CircuitBreak,   // stop the agent
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryState {
+    pub consecutive_failures: u32,
+    pub total_retries: u32,
+    pub backoff_ms: u64,
+}
+
+impl RecoveryState {
+    pub fn new() -> Self {
+        Self {
+            consecutive_failures: 0,
+            total_retries: 0,
+            backoff_ms: 0,
+        }
+    }
+
+    pub fn record_success(&mut self) {
+        self.consecutive_failures = 0;
+        self.backoff_ms = 0;
+    }
+
+    pub fn record_failure(&mut self, config: &RecoveryConfig) -> RecoveryAction {
+        self.consecutive_failures += 1;
+
+        if self.should_circuit_break(config) {
+            return RecoveryAction::CircuitBreak;
+        }
+
+        if self.backoff_ms == 0 {
+            self.backoff_ms = config.base_delay_ms;
+        } else {
+            self.backoff_ms = (self.backoff_ms * 2).min(config.max_delay_ms);
+        }
+
+        self.total_retries += 1;
+        RecoveryAction::Retry(self.backoff_ms)
+    }
+
+    pub fn should_circuit_break(&self, config: &RecoveryConfig) -> bool {
+        self.consecutive_failures >= config.max_consecutive_failures
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubAgentConfig {
     pub id: String,

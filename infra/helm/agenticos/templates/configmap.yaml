@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agenticos.fullname" . }}-config
+  labels:
+    {{- include "agenticos.labels" . | nindent 4 }}
+data:
+  DATABASE_URL: {{ .Values.env.DATABASE_URL | quote }}
+  QDRANT_URL: {{ .Values.env.QDRANT_URL | quote }}
+  LLM_BASE_URL: {{ .Values.env.LLM_BASE_URL | quote }}
+  RUST_LOG: {{ .Values.env.RUST_LOG | quote }}

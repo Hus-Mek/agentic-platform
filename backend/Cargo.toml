@@ -36,3 +36,9 @@ qdrant-client = "1.18"
 schemars = "1.2"
 derive_builder = "0.20"
 regex = "1"
+rig-core = "0.38"
+opentelemetry = "0.27"
+opentelemetry-otlp = { version = "0.27", features = ["tonic"] }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+tracing-opentelemetry = "0.28"
+wasmtime = "25"

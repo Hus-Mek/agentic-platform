@@ -25,3 +25,7 @@ Thumbs.db
 
 # Agent Skills clone
 .agent-skills/
+.opencode_prompt_*.txt
+PLAN.md
+PLAN_HARNESS.md
+get_helm.sh

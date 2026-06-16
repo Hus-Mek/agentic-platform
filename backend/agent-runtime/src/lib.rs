@@ -1,9 +1,11 @@
+pub mod error;
 pub mod evaluate;
 pub mod loop_mod;
 pub mod memory_extractor;
 pub mod orchestrator;
 pub mod plan;
 pub mod rag;
+pub mod recovery;
 pub mod responder;
 pub mod streaming;
 pub mod tool;

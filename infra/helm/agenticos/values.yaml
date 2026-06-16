@@ -1,0 +1,49 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/hus-mek/agenticos-api-server
+  tag: latest
+  pullPolicy: IfNotPresent
+
+frontend:
+  image:
+    repository: ghcr.io/hus-mek/agenticos-frontend
+    tag: latest
+  replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: agenticos.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+postgresql:
+  enabled: true
+  auth:
+    database: agenticos
+    username: agenticos
+    password: changeme
+  primary:
+    persistence:
+      size: 10Gi
+
+qdrant:
+  enabled: true
+  persistence:
+    size: 10Gi
+
+env:
+  DATABASE_URL: "postgresql://agenticos:changeme@agenticos-postgresql:5432/agenticos"
+  QDRANT_URL: "http://agenticos-qdrant:6333"
+  LLM_BASE_URL: "https://openrouter.ai/api/v1"
+  LLM_API_KEY: ""
+  PORTKEY_API_KEY: ""
+  JWT_SECRET: "change-me-in-production"
+  RUST_LOG: "info"

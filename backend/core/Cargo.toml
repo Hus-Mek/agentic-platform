@@ -13,3 +13,8 @@ thiserror = { workspace = true }
 schemars = { workspace = true }
 derive_builder = { workspace = true }
 reqwest = { workspace = true }
+rig-core = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+tracing-opentelemetry = { workspace = true }
