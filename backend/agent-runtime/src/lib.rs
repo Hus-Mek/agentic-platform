@@ -24,6 +24,7 @@ pub use orchestrator::{collect_team_stats, create_delegate_tool, TeamOrchestrato
 pub use plan::{LiteLLMClient, LlmResponse, LlmUsage, PlanResult, PlanStep, PlanStepStatus, PlanExecution};
 pub use plan_executor::execute_plan;
 pub use pipeline_engine::{PipelineEngine, PipelineError};
+pub use responder::{Responder, ResponderError};
 pub use rag::KbRetriever;
 pub use streaming::{run_agent_streaming, StreamEvent};
 pub use tool::{ToolImpl, ToolRegistry};
