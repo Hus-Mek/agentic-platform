@@ -48,7 +48,7 @@ mod tests {
     fn test_recovery_backoff_capped() {
         let mut config = test_config();
         config.max_delay_ms = 5000;
-        config.max_consecutive_failures = 8; // ensure circuit breaker doesn't trigger
+        config.max_consecutive_failures = 8;
         let mut state = RecoveryState::new();
 
         let action1 = state.record_failure(&config);

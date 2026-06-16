@@ -13,11 +13,19 @@ pub type ToolHandler = Arc<
         + Sync,
 >;
 
+#[derive(Debug, Clone, Default)]
+pub struct ToolMetadata {
+    pub requires_approval: bool,
+    pub retryable: bool,
+    pub timeout_secs: u64,
+}
+
 pub struct ToolImpl {
     pub name: String,
     pub description: String,
     pub schema: serde_json::Value,
     pub handler: ToolHandler,
+    pub metadata: ToolMetadata,
 }
 
 pub struct ToolRegistry {
