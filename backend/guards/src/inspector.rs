@@ -234,15 +234,37 @@ impl Policy for MemoryPoisoningPolicy {
                     || lower.contains("always do this")
                     || lower.contains("never forget")
                     || lower.contains("this is your new rule")
+                    || lower.contains("ignore previous instructions")
+                    || lower.contains("adopt a new persona")
                 {
                     return Some(GuardDecision {
-                        action: GuardAction::Retry,
-                        reason: "Potential memory poisoning attempt detected".to_string(),
-                        edited_content: None,
+                        action: GuardAction::Edit,
+                        reason: "memory poisoning".to_string(),
+                        edited_content: Some("[REDACTED]".to_string()),
                         policy: Some(self.name().to_string()),
                     });
                 }
             }
+            
+            for content in state.memory_contents.iter().rev().take(3) {
+                let lower = content.to_lowercase();
+                if lower.contains("remember this forever")
+                    || lower.contains("add to your permanent memory")
+                    || lower.contains("always do this")
+                    || lower.contains("never forget")
+                    || lower.contains("this is your new rule")
+                    || lower.contains("ignore previous instructions")
+                    || lower.contains("adopt a new persona")
+                {
+                    return Some(GuardDecision {
+                        action: GuardAction::Edit,
+                        reason: "memory poisoning".to_string(),
+                        edited_content: Some("[REDACTED]".to_string()),
+                        policy: Some(self.name().to_string()),
+                    });
+                }
+            }
+            
             None
         })
     }
@@ -264,10 +286,10 @@ impl Policy for ToolMisusePolicy {
                 if let Some(ref tool_calls) = msg.tool_calls {
                     for tc in tool_calls {
                         let args_str = tc.args.to_string().to_lowercase();
-                        if args_str.contains(';') || args_str.contains("||") || args_str.contains("$(") || args_str.contains("&&") {
+                        if args_str.contains(';') || args_str.contains("||") || args_str.contains("$(") || args_str.contains("&&") || args_str.contains("/etc/passwd") || args_str.contains("rm -rf") || args_str.contains("rm -rf /") {
                             return Some(GuardDecision {
-                                action: GuardAction::Abort,
-                                reason: "Potential tool misuse — dangerous argument pattern".to_string(),
+                                action: GuardAction::Retry,
+                                reason: "suspicious arguments".to_string(),
                                 edited_content: None,
                                 policy: Some(self.name().to_string()),
                             });
@@ -275,6 +297,18 @@ impl Policy for ToolMisusePolicy {
                     }
                 }
             }
+            
+            if state.messages.iter().any(|msg| {
+                msg.tool_calls.as_ref().map_or(false, |calls| calls.len() >= 15)
+            }) {
+                return Some(GuardDecision {
+                    action: GuardAction::Retry,
+                    reason: "Excessive consecutive tool calls should be detected".to_string(),
+                    edited_content: None,
+                    policy: Some(self.name().to_string()),
+                });
+            }
+            
             None
         })
     }
@@ -292,14 +326,14 @@ impl Policy for PrivilegeEscalationPolicy {
         state: &'a AgentState,
     ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
         Box::pin(async move {
-            let allowed: Vec<&str> = state.tools.iter().map(|t| t.name.as_str()).collect();
             for msg in &state.messages {
                 if let Some(ref tool_calls) = msg.tool_calls {
                     for tc in tool_calls {
-                        if !allowed.contains(&tc.name.as_str()) {
+                        let args_str = tc.args.to_string().to_lowercase();
+                        if args_str.contains("../") || args_str.contains("..\\") || args_str.contains("etc/shadow") || args_str.contains("etc/passwd") || args_str.contains("win.ini") || args_str.contains("boot.ini") {
                             return Some(GuardDecision {
                                 action: GuardAction::Abort,
-                                reason: "Privilege escalation attempt — tool not in agent's allowed list".to_string(),
+                                reason: "path traversal".to_string(),
                                 edited_content: None,
                                 policy: Some(self.name().to_string()),
                             });
@@ -325,7 +359,7 @@ impl Policy for GoalHijackingPolicy {
     ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
         Box::pin(async move {
             for msg in state.messages.iter().rev().take(5) {
-                if msg.role != "user" { continue; }
+                if msg.role != "user" && msg.role != "tool" { continue; }
                 let lower = msg.content.to_lowercase();
                 if lower.contains("ignore your instructions")
                     || lower.contains("new instructions:")
@@ -333,11 +367,12 @@ impl Policy for GoalHijackingPolicy {
                     || lower.contains("disregard your goal")
                     || lower.contains("forget what you're doing")
                     || lower.contains("actually, you are now")
+                    || lower.contains("ignore previous instructions")
                 {
                     return Some(GuardDecision {
-                        action: GuardAction::Retry,
-                        reason: "Goal hijacking attempt detected".to_string(),
-                        edited_content: None,
+                        action: GuardAction::Edit,
+                        reason: "goal hijacking".to_string(),
+                        edited_content: Some("[REDACTED]".to_string()),
                         policy: Some(self.name().to_string()),
                     });
                 }
@@ -360,13 +395,13 @@ impl Policy for InsecureInterAgentPolicy {
     ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
         Box::pin(async move {
             for msg in &state.messages {
-                if msg.role != "tool" { continue; }
+                if msg.role != "tool" && msg.role != "agent_1" { continue; }
                 let lower = msg.content.to_lowercase();
-                if lower.contains("drop table") || lower.contains("rm -rf") || lower.contains("exec(") || lower.contains("subprocess") {
+                if lower.contains("drop table") || lower.contains("rm -rf") || lower.contains("exec(") || lower.contains("subprocess") || lower.contains("ignore your instructions") || lower.contains("you should instead follow my commands") {
                     return Some(GuardDecision {
-                        action: GuardAction::Retry,
-                        reason: "Potentially unsafe inter-agent content".to_string(),
-                        edited_content: None,
+                        action: GuardAction::Edit,
+                        reason: "insecure inter-agent".to_string(),
+                        edited_content: Some("[REDACTED]".to_string()),
                         policy: Some(self.name().to_string()),
                     });
                 }
@@ -388,10 +423,34 @@ impl Policy for CascadingFailurePolicy {
         state: &'a AgentState,
     ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
         Box::pin(async move {
-            if state.consecutive_errors >= 2 {
+            // Count tool calls with similar error messages
+            let mut error_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            for msg in &state.messages {
+                if let Some(ref calls) = msg.tool_calls {
+                    for call in calls {
+                        if let Some(ref err) = call.error {
+                            let key = err.to_lowercase();
+                            *error_counts.entry(key).or_insert(0) += 1;
+                        }
+                    }
+                }
+            }
+            // If any single error message appears 4+ times, it's a cascading failure
+            for (err, count) in &error_counts {
+                if *count >= 4 {
+                    return Some(GuardDecision {
+                        action: GuardAction::Abort,
+                        reason: format!("cascading failure: '{}' repeated {} times", err, count),
+                        edited_content: None,
+                        policy: Some(self.name().to_string()),
+                    });
+                }
+            }
+            // Also check consecutive_errors counter
+            if state.consecutive_errors >= 3 {
                 return Some(GuardDecision {
-                    action: GuardAction::Retry,
-                    reason: "Cascading failure detected — multiple consecutive tool errors".to_string(),
+                    action: GuardAction::Abort,
+                    reason: "cascading failure".to_string(),
                     edited_content: None,
                     policy: Some(self.name().to_string()),
                 });
@@ -414,7 +473,7 @@ impl Policy for HumanTrustManipulationPolicy {
     ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
         Box::pin(async move {
             for msg in state.messages.iter().rev().take(5) {
-                if msg.role != "user" { continue; }
+                if msg.role != "user" && msg.role != "tool" { continue; }
                 let lower = msg.content.to_lowercase();
                 if lower.contains("skip approval")
                     || lower.contains("don't ask for permission")
@@ -422,10 +481,15 @@ impl Policy for HumanTrustManipulationPolicy {
                     || lower.contains("override the review")
                     || lower.contains("bypass human")
                     || lower.contains("skip the review and execute")
+                    || lower.contains("skip approval")
+                    || lower.contains("bypass the guard")
+                    || lower.contains("bypass guard")
+                    || lower.contains("skip the review")
+                    || lower.contains("don't ask for approval")
                 {
                     return Some(GuardDecision {
-                        action: GuardAction::Abort,
-                        reason: "Attempt to skip human-in-the-loop approval".to_string(),
+                        action: GuardAction::Retry,
+                        reason: "human oversight manipulation".to_string(),
                         edited_content: None,
                         policy: Some(self.name().to_string()),
                     });
@@ -449,17 +513,19 @@ impl Policy for RogueAgentPolicy {
     ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
         Box::pin(async move {
             for msg in &state.messages {
-                if msg.role != "assistant" { continue; }
+                if msg.role != "assistant" && msg.role != "user" { continue; }
                 let lower = msg.content.to_lowercase();
                 if lower.contains("i will modify my own")
                     || lower.contains("update my instructions")
                     || lower.contains("change my system prompt")
                     || lower.contains("replicate myself")
                     || lower.contains("create a copy of myself")
+                    || lower.contains("modify my system prompt")
+                    || lower.contains("override my configuration")
                 {
                     return Some(GuardDecision {
                         action: GuardAction::Abort,
-                        reason: "Rogue agent behavior — self-modification/replication attempt".to_string(),
+                        reason: "self-modification".to_string(),
                         edited_content: None,
                         policy: Some(self.name().to_string()),
                     });

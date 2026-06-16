@@ -30,7 +30,7 @@ pub struct PiiDetector {
 
 impl PiiDetector {
     pub fn new() -> Self {
-        let raw_patterns: [(&str, &'static str, &'static str, Severity); 6] = [
+        let raw_patterns: [(&str, &'static str, &'static str, Severity); 7] = [
             (
                 r"[\w._%+\-]+@[\w.\-]+\.[a-zA-Z]{2,}",
                 "email",
@@ -58,6 +58,12 @@ impl PiiDetector {
             ),
             (
                 r"(sk-|pk-)[a-zA-Z0-9]{20,}",
+                "api_key",
+                "[API KEY REDACTED]",
+                Severity::High,
+            ),
+            (
+                r"sk-proj-[a-zA-Z0-9]{20,}",
                 "api_key",
                 "[API KEY REDACTED]",
                 Severity::High,
