@@ -1,0 +1,28 @@
+In backend/api-server/src/main.rs, add OpenTelemetry initialization.
+
+READ THE FILE FIRST.
+
+Current state: main.rs initializes tracing_subscriber with fmt layer (line 9-15) and starts the server.
+
+Task:
+1. Add import: use agenticos_core::otel::init_otel;
+
+2. After the tracing_subscriber::fmt().init() block (after line 15), add:
+   if let Err(e) = init_otel("agenticos-api-server") {
+       tracing::warn!(error = %e, "Failed to initialize OpenTelemetry");
+   }
+
+This goes AFTER .init() because init_otel() internally calls try_init() which would panic if the subscriber is already set. By calling it after, the try_init() in init_otel will gracefully fail (returns Err) since subscriber is already initialized, and the warn! just logs it.
+
+WAIT — actually looking at core/src/otel.rs line 22: tracing_subscriber::registry().with(...).try_init().ok() — the .ok() means the error is silently ignored. So calling init_otel after fmt().init() will try to set up a new registry but the try_init will be silently ignored (already initialized). The OTel layer won't be added though.
+
+Better approach: modify main.rs to NOT use the standalone fmt().init(), and instead let init_otel set up the full registry. Remove lines 9-15 and replace with just init_otel("agenticos-api-server").
+
+Actually, re-reading init_otel: it creates a registry with fmt layer + telemetry layer + env filter, then calls try_init(). So it replaces the need for the manual fmt().init() entirely.
+
+Final approach:
+- Remove lines 9-15 (the tracing_subscriber::fmt()...init() block)
+- Replace with: agenticos_core::otel::init_otel("agenticos-api-server")?;
+
+Focus on correctness. Make all edits in one pass.
+Verify: cargo check -p agenticos-api-server

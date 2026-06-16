@@ -1,0 +1,14 @@
+Create feature flags. 2 files, no conflicts with t2/t4:
+
+A) Create /c/Users/USER/agentic-platform/backend/core/src/features.rs:
+FeatureFlags struct with Arc<std::sync::RwLock<HashMap<String, bool>>>.
+Methods: new() (defaults: parallel_subagents/t, planning_tool/t, filesystem_tools/t, mcp_tools/t, hitl_approval/f, wasm_sandbox/f, cost_dashboard/t), is_enabled(flag) -> bool, enable(flag), disable(flag), all_flags() -> Vec<(String, bool)>.
+Add `pub mod features;` to /c/Users/USER/agentic-platform/backend/core/src/lib.rs.
+
+B) Create /c/Users/USER/agentic-platform/backend/api-server/src/routes/features.rs:
+3 endpoints: GET /api/features, POST /api/features/{flag}/enable, POST /api/features/{flag}/disable.
+Add feature_flags: Arc<agenticos_core::features::FeatureFlags> to AppState + init in AppState::new().
+Add routes to protected_routes in lib.rs.
+Add `pub mod features;` to routes/mod.rs.
+
+Read files first. Make all edits. Verify cargo check --workspace.

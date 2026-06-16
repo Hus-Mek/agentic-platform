@@ -1,0 +1,94 @@
+Implement multi-provider LLM abstraction in the workspace at C:\Users\USER/agentic-platform/backend.
+
+GOAL: Create llm_provider.rs with a trait-based provider system, refactor LiteLLMClient into a facade.
+
+CONTEXT:
+- Read core/src/llm.rs first to understand the current LiteLLMClient struct and its methods
+- Read core/src/lib.rs to see current exports
+- Read core/Cargo.toml for dependencies
+
+TASKS:
+
+1. CREATE core/src/llm_provider.rs with:
+
+```rust
+use async_trait::async_trait;
+use crate::state::{Message, ToolCall, ToolDefinition};
+use crate::llm::{LlmResponse, LlmUsage};
+
+#[async_trait]
+pub trait LlmProvider: Send + Sync {
+    async fn chat_completion(
+        &self,
+        model: &str,
+        messages: &[Message],
+        tools: &[ToolDefinition],
+    ) -> crate::error::Result<LlmResponse>;
+}
+
+pub enum ProviderKind {
+    OpenAI,
+    Anthropic,
+    Google,
+}
+
+pub fn detect_provider(model: &str) -> ProviderKind {
+    if model.starts_with("claude") || model.starts_with("anthropic") {
+        ProviderKind::Anthropic
+    } else if model.starts_with("gemini") || model.starts_with("google") {
+        ProviderKind::Google
+    } else {
+        ProviderKind::OpenAI
+    }
+}
+```
+
+2. ADD to core/Cargo.toml:
+```toml
+async-trait = "0.1"
+```
+
+3. MODIFY core/src/llm.rs:
+- Keep existing LiteLLMClient but rename the struct fields to be OpenAI-specific
+- Add a new LlmClient struct that wraps LiteLLMClient and implements provider routing
+- Add `pub type LiteLLMClient = LlmClient;` for backward compatibility
+- The LlmClient should have a `chat_completion` that routes based on detect_provider
+- For now, all providers fall back to the OpenAI implementation (Anthropic/Google are stubs)
+
+4. ADD to core/src/lib.rs:
+- `pub mod llm_provider;`
+- `pub use llm_provider::{LlmProvider, ProviderKind, detect_provider};`
+
+5. CREATE core/tests/llm_provider_tests.rs:
+```rust
+#[cfg(test)]
+mod tests {
+    use super::super::llm_provider::{detect_provider, ProviderKind};
+
+    #[test]
+    fn detect_openai_gpt4() {
+        assert!(matches!(detect_provider("gpt-4"), ProviderKind::OpenAI));
+    }
+
+    #[test]
+    fn detect_anthropic_claude() {
+        assert!(matches!(detect_provider("claude-3-opus"), ProviderKind::Anthropic));
+    }
+
+    #[test]
+    fn detect_google_gemini() {
+        assert!(matches!(detect_provider("gemini-1.5-pro"), ProviderKind::Google));
+    }
+}
+```
+
+IMPORTANT:
+- Read all files before editing
+- Maintain backward compatibility: existing callers of LiteLLMClient should still work
+- Use `async-trait` crate for the trait
+- Verify: cargo test -p agenticos-core
+- Verify: cargo check --workspace
+
+Use model: opencode/nemotron-3-ultra-free with --variant max
+
+Working directory: C:\Users\USER/agentic-platform/backend

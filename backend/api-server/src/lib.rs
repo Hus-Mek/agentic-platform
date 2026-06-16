@@ -15,6 +15,7 @@ use tower_http::trace::TraceLayer;
 use agenticos_agent_runtime::rag::KbRetriever;
 use agenticos_agent_runtime::tool::ToolRegistry;
 use agenticos_core::config::AppConfig;
+use agenticos_core::features::FeatureFlags;
 use agenticos_guards::GuardEngine;
 use agenticos_memory::MemoryClient;
 
@@ -29,6 +30,7 @@ pub struct AppState {
     pub guard_engine: Arc<GuardEngine>,
     pub memory_client: Arc<MemoryClient>,
     pub kb_retriever: Arc<KbRetriever>,
+    pub feature_flags: Arc<FeatureFlags>,
 }
 
 impl AppState {
@@ -38,6 +40,7 @@ impl AppState {
         let guard_engine = Arc::new(GuardEngine::new());
         let memory_client = Arc::new(MemoryClient::from_config(&config).await);
         let kb_retriever = Arc::new(KbRetriever::new(db.clone(), llm_client.clone()));
+        let feature_flags = Arc::new(FeatureFlags::new());
         Self {
             config,
             db,
@@ -46,6 +49,7 @@ impl AppState {
             guard_engine,
             memory_client,
             kb_retriever,
+            feature_flags,
         }
     }
 }
@@ -109,6 +113,12 @@ pub fn create_router(state: AppState) -> Router {
             "/api/knowledge-bases/{id}/documents/{doc_id}",
             delete(routes::kb::delete_document),
         )
+        .route("/api/features", get(routes::features::list_features))
+        .route("/api/features/{flag}/enable", post(routes::features::enable_feature))
+        .route("/api/features/{flag}/disable", post(routes::features::disable_feature))
+        .route("/api/approvals", get(routes::approval::list_approvals))
+        .route("/api/approvals/{id}/approve", post(routes::approval::approve_request))
+        .route("/api/approvals/{id}/reject", post(routes::approval::reject_request))
         .layer(from_fn_with_state(
             state.clone(),
             middleware::auth::auth_middleware,

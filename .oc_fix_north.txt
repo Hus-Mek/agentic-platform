@@ -1,0 +1,13 @@
+Fix compilation errors in the workspace at C:\Users\USER/agentic-platform/backend so that `cargo test -p agenticos-agent-runtime` passes.
+
+Read these files first:
+1. agent-runtime/tests/security_tests.rs
+2. agent-runtime/tests/eval_harness.rs
+3. core/src/state.rs (to see actual AgentState fields)
+
+Then fix all errors in security_tests.rs and eval_harness.rs:
+- Replace references to non-existent fields with correct ones from AgentState
+- If a test references something that doesn't exist (like `sub_agent_count`), remove or fix it
+- After fixing, run: cargo test -p agenticos-agent-runtime
+
+Working directory: C:\Users\USER/agentic-platform/backend

@@ -1,0 +1,31 @@
+Create backend/agent-runtime/src/sandbox.rs:
+
+```rust
+use wasmtime::{Engine, Store, Module, Instance, Func, Val, FuncType, ValType};
+
+pub struct WasmSandbox {
+    engine: Engine,
+}
+
+impl WasmSandbox {
+    pub fn new() -> Self {
+        Self { engine: Engine::default() }
+    }
+
+    pub fn execute(&self, wasm_bytes: &[u8], func_name: &str) -> anyhow::Result<String> {
+        let mut store = Store::new(&self.engine, ());
+        let module = Module::new(&self.engine, wasm_bytes)?;
+        let instance = Instance::new(&mut store, &module, &[])?;
+        let func = instance.get_func(&mut store, func_name)
+            .ok_or_else(|| anyhow::anyhow!("Function '{}' not found", func_name))?;
+        let mut results = vec![Val::I32(0); 1];
+        func.call(&mut store, &[], &mut results)?;
+        Ok(format!("{:?}", results))
+    }
+}
+```
+
+Add `pub mod sandbox;` to agent-runtime/src/lib.rs.
+Add `wasmtime = { workspace = true }` to agent-runtime/Cargo.toml.
+
+Verify cargo check -p agenticos-agent-runtime.

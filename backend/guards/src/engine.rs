@@ -17,6 +17,14 @@ impl GuardEngine {
         inspector.add_policy(crate::inspector::TokenBudgetPolicy);
         inspector.add_policy(crate::inspector::ContentModeration::new());
         inspector.add_policy(crate::inspector::IterationLimit);
+        inspector.add_policy(crate::inspector::MemoryPoisoningPolicy);
+        inspector.add_policy(crate::inspector::ToolMisusePolicy);
+        inspector.add_policy(crate::inspector::PrivilegeEscalationPolicy);
+        inspector.add_policy(crate::inspector::GoalHijackingPolicy);
+        inspector.add_policy(crate::inspector::InsecureInterAgentPolicy);
+        inspector.add_policy(crate::inspector::CascadingFailurePolicy);
+        inspector.add_policy(crate::inspector::HumanTrustManipulationPolicy);
+        inspector.add_policy(crate::inspector::RogueAgentPolicy);
         Self {
             inspector,
             bodyguard: Bodyguard::new(),

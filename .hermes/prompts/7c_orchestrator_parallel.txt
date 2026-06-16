@@ -1,0 +1,33 @@
+In backend/agent-runtime/src/orchestrator.rs, add parallel sub-agent execution.
+
+READ THE FILE FIRST (all 535 lines) to understand the complete structure.
+
+Facts:
+- Lines 102-204: Sequential for-loop processes tool_calls. Delegate calls run self.run_sub_agent().await.
+- Lines 239-333: run_sub_agent method
+- self.config.execution_mode is ExecutionMode::Sequential or ExecutionMode::Parallel
+- TeamConfig has execution_mode field
+- LiteLLMClient is Clone, PgPool is Clone, SubAgentConfig is Clone
+- There are NO other callers of run_sub_agent except the sequential loop
+
+Task:
+1. Add `use futures::future;` import at top.
+
+2. In PlanResult::ToolCalls arm (line 102), wrap the existing sequential loop in:
+   if self.config.execution_mode == ExecutionMode::Sequential { ... existing code ... }
+   else { /* new parallel path using self.run_parallel(...).await?; */ }
+
+3. Add method run_parallel(&self, tool_calls, supervisor_state, run_id, workspace_id, user_id, delegations, delegation_count) -> anyhow::Result<()>:
+   - Partition tool_calls into delegates (name=="delegate") and regular (others)
+   - For delegates: clone the Arcs + needed data, then for each delegate tokio::spawn a task
+     that inlines the run_sub_agent logic (create sub_state, run_agent, return DelegationResult)
+   - futures::future::join_all(handles).await to wait
+   - Process results: add messages to supervisor_state, push to delegations vec
+   - For regular tool calls: execute sequentially using self.tool_registry.execute() as before
+   - Handle JoinError from panicked tasks gracefully
+
+4. Delete the old run_sub_agent method since it's now inlined in the spawned tasks.
+
+Focus on correctness. No "work fast". Handle edge cases (empty delegates, join errors, unknown sub-agent).
+Make all edits in one pass.
+Verify: cargo check --workspace

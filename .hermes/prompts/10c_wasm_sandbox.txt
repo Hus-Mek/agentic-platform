@@ -1,0 +1,30 @@
+Create backend/agent-runtime/src/sandbox.rs with a WasmSandbox struct using wasmtime.
+
+READ backend/agent-runtime/src/lib.rs and backend/agent-runtime/Cargo.toml first to understand the module structure and dependencies.
+
+wasmtime = "25" is already in workspace dependencies.
+
+Create sandbox.rs with:
+
+1. WasmSandbox struct:
+   - engine: wasmtime::Engine
+   - No need for a Store field — create per-call
+
+2. impl WasmSandbox:
+   - fn new() -> Self: creates a default wasmtime::Engine::default()
+   
+   - fn execute(&self, wasm_bytes: &[u8], func_name: &str, args: &[wasmtime::Val]) -> anyhow::Result<Vec<wasmtime::Val>>:
+     * Creates a Store<()>, compiles the module, instantiates, calls the function, returns results
+     * Keep it simple — no fuel limits for now
+
+   - fn execute_expression(&self, expr: &str) -> anyhow::Result<String>:
+     * Placeholder — just returns Ok(expr.to_string())
+     * This will be extended later
+
+3. Add `pub mod sandbox;` to backend/agent-runtime/src/lib.rs
+
+4. Add wasmtime dependency to backend/agent-runtime/Cargo.toml if not already present transitively:
+   wasmtime = { workspace = true }
+
+Focus on correctness. This is a foundation — doesn't need to be deeply integrated yet.
+Verify: cargo check -p agenticos-agent-runtime

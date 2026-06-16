@@ -1,0 +1,15 @@
+Read these files in the workspace at C:\Users\USER/agentic-platform/backend:
+1. agent-runtime/tests/security_tests.rs
+2. agent-runtime/tests/eval_harness.rs  
+3. core/src/state.rs (to see actual AgentState fields)
+
+Fix all compilation errors in security_tests.rs and eval_harness.rs so that:
+- `cargo test -p agenticos-agent-runtime` passes (lib + integration tests)
+- Read state.rs first to see the actual field names on AgentState
+- Replace any references to non-existent fields with the correct ones
+- If a test references something that doesn't exist (like `sub_agent_count`), either remove that test or fix it to use actual fields
+- Run: cargo test -p agenticos-agent-runtime after fixing to verify
+
+Use model: opencode/nemotron-3-ultra-free with --variant max
+
+Working directory: C:\Users\USER/agentic-platform/backend

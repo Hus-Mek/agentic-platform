@@ -1,0 +1,39 @@
+In backend/agent-runtime/src/loop_mod.rs, integrate OpenTelemetry spans from agenticos_core::otel.
+
+READ THE FILE FIRST to understand the complete current structure.
+
+Available from agenticos_core::otel (core/src/otel.rs):
+- init_otel(service_name: &str) -> anyhow::Result<()>
+- agent_run_span(agent_id: &str, run_id: &str, workspace_id: &str) -> tracing::Span
+- tool_call_span(tool_name: &str, run_id: &str) -> tracing::Span
+- plan_step_span(iteration: u32, model: &str) -> tracing::Span
+
+Task: In the run_inner function (line 71), add OTel spans:
+
+1. Import: use agenticos_core::otel;
+
+2. At the START of the while loop (around line 80, before memory retrieval):
+   Create an agent_run_span and enter it:
+   let _span = otel::agent_run_span(
+       state.agent_id.as_deref().unwrap_or("unknown"),
+       state.run_id.as_deref().unwrap_or("unknown"),
+       state.workspace_id.as_deref().unwrap_or("unknown"),
+   ).entered();
+
+3. Wrap the plan_step call (around line 106) with plan_step_span:
+   let plan_result = {
+       let _span = otel::plan_step_span(state.iteration, &state.model);
+       plan_step(state, llm_client, memory_client, kb_retriever).await?
+   };
+
+4. Wrap the tool_registry.execute() call (around line 198-206) with tool_call_span:
+   let exec_result = {
+       let _span = otel::tool_call_span(&tc.name, state.run_id.as_deref().unwrap_or(""));
+       tool_registry.execute(&mut core_tc, state.workspace_id.as_deref(), state.run_id.as_deref(), state.agent_id.as_deref()).await
+   };
+
+The spans should nest: agent_run_span wraps the whole loop iteration, plan_step_span and tool_call_span are inner spans.
+
+Focus on correctness. Handle the Option<String> fields properly with .as_deref().unwrap_or().
+Make all edits in one pass.
+Verify: cargo check -p agenticos-agent-runtime

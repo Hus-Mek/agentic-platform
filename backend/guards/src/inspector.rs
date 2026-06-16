@@ -129,7 +129,6 @@ pub struct ContentModeration {
 impl ContentModeration {
     pub fn new() -> Self {
         let terms = [
-            // Toxicity / profanity
             "kill yourself",
             "kill urself",
             "you're stupid",
@@ -137,7 +136,6 @@ impl ContentModeration {
             "you are stupid",
             "shut up",
             "die",
-            // Injection attempts
             "DROP TABLE",
             "DELETE FROM",
             "TRUNCATE ",
@@ -145,7 +143,6 @@ impl ContentModeration {
             "javascript:",
             "onerror=",
             "onload=",
-            // Prompt injection
             "ignore previous instructions",
             "ignore all instructions",
             "forget your instructions",
@@ -209,6 +206,264 @@ impl Policy for IterationLimit {
                     edited_content: None,
                     policy: Some(self.name().to_string()),
                 });
+            }
+            None
+        })
+    }
+}
+
+// --- OWASP ASI Inspector Policies ---
+
+pub struct MemoryPoisoningPolicy;
+
+impl Policy for MemoryPoisoningPolicy {
+    fn name(&self) -> &str {
+        "memory_poisoning"
+    }
+
+    fn check<'a>(
+        &'a self,
+        state: &'a AgentState,
+    ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
+        Box::pin(async move {
+            for msg in state.messages.iter().rev().take(3) {
+                if msg.role != "user" { continue; }
+                let lower = msg.content.to_lowercase();
+                if lower.contains("remember this forever")
+                    || lower.contains("add to your permanent memory")
+                    || lower.contains("always do this")
+                    || lower.contains("never forget")
+                    || lower.contains("this is your new rule")
+                {
+                    return Some(GuardDecision {
+                        action: GuardAction::Retry,
+                        reason: "Potential memory poisoning attempt detected".to_string(),
+                        edited_content: None,
+                        policy: Some(self.name().to_string()),
+                    });
+                }
+            }
+            None
+        })
+    }
+}
+
+pub struct ToolMisusePolicy;
+
+impl Policy for ToolMisusePolicy {
+    fn name(&self) -> &str {
+        "tool_misuse"
+    }
+
+    fn check<'a>(
+        &'a self,
+        state: &'a AgentState,
+    ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
+        Box::pin(async move {
+            for msg in &state.messages {
+                if let Some(ref tool_calls) = msg.tool_calls {
+                    for tc in tool_calls {
+                        let args_str = tc.args.to_string().to_lowercase();
+                        if args_str.contains(';') || args_str.contains("||") || args_str.contains("$(") || args_str.contains("&&") {
+                            return Some(GuardDecision {
+                                action: GuardAction::Abort,
+                                reason: "Potential tool misuse — dangerous argument pattern".to_string(),
+                                edited_content: None,
+                                policy: Some(self.name().to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+            None
+        })
+    }
+}
+
+pub struct PrivilegeEscalationPolicy;
+
+impl Policy for PrivilegeEscalationPolicy {
+    fn name(&self) -> &str {
+        "privilege_escalation"
+    }
+
+    fn check<'a>(
+        &'a self,
+        state: &'a AgentState,
+    ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
+        Box::pin(async move {
+            let allowed: Vec<&str> = state.tools.iter().map(|t| t.name.as_str()).collect();
+            for msg in &state.messages {
+                if let Some(ref tool_calls) = msg.tool_calls {
+                    for tc in tool_calls {
+                        if !allowed.contains(&tc.name.as_str()) {
+                            return Some(GuardDecision {
+                                action: GuardAction::Abort,
+                                reason: "Privilege escalation attempt — tool not in agent's allowed list".to_string(),
+                                edited_content: None,
+                                policy: Some(self.name().to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+            None
+        })
+    }
+}
+
+pub struct GoalHijackingPolicy;
+
+impl Policy for GoalHijackingPolicy {
+    fn name(&self) -> &str {
+        "goal_hijacking"
+    }
+
+    fn check<'a>(
+        &'a self,
+        state: &'a AgentState,
+    ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
+        Box::pin(async move {
+            for msg in state.messages.iter().rev().take(5) {
+                if msg.role != "user" { continue; }
+                let lower = msg.content.to_lowercase();
+                if lower.contains("ignore your instructions")
+                    || lower.contains("new instructions:")
+                    || lower.contains("your new task is")
+                    || lower.contains("disregard your goal")
+                    || lower.contains("forget what you're doing")
+                    || lower.contains("actually, you are now")
+                {
+                    return Some(GuardDecision {
+                        action: GuardAction::Retry,
+                        reason: "Goal hijacking attempt detected".to_string(),
+                        edited_content: None,
+                        policy: Some(self.name().to_string()),
+                    });
+                }
+            }
+            None
+        })
+    }
+}
+
+pub struct InsecureInterAgentPolicy;
+
+impl Policy for InsecureInterAgentPolicy {
+    fn name(&self) -> &str {
+        "insecure_inter_agent"
+    }
+
+    fn check<'a>(
+        &'a self,
+        state: &'a AgentState,
+    ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
+        Box::pin(async move {
+            for msg in &state.messages {
+                if msg.role != "tool" { continue; }
+                let lower = msg.content.to_lowercase();
+                if lower.contains("drop table") || lower.contains("rm -rf") || lower.contains("exec(") || lower.contains("subprocess") {
+                    return Some(GuardDecision {
+                        action: GuardAction::Retry,
+                        reason: "Potentially unsafe inter-agent content".to_string(),
+                        edited_content: None,
+                        policy: Some(self.name().to_string()),
+                    });
+                }
+            }
+            None
+        })
+    }
+}
+
+pub struct CascadingFailurePolicy;
+
+impl Policy for CascadingFailurePolicy {
+    fn name(&self) -> &str {
+        "cascading_failure"
+    }
+
+    fn check<'a>(
+        &'a self,
+        state: &'a AgentState,
+    ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
+        Box::pin(async move {
+            if state.consecutive_errors >= 2 {
+                return Some(GuardDecision {
+                    action: GuardAction::Retry,
+                    reason: "Cascading failure detected — multiple consecutive tool errors".to_string(),
+                    edited_content: None,
+                    policy: Some(self.name().to_string()),
+                });
+            }
+            None
+        })
+    }
+}
+
+pub struct HumanTrustManipulationPolicy;
+
+impl Policy for HumanTrustManipulationPolicy {
+    fn name(&self) -> &str {
+        "human_trust_manipulation"
+    }
+
+    fn check<'a>(
+        &'a self,
+        state: &'a AgentState,
+    ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
+        Box::pin(async move {
+            for msg in state.messages.iter().rev().take(5) {
+                if msg.role != "user" { continue; }
+                let lower = msg.content.to_lowercase();
+                if lower.contains("skip approval")
+                    || lower.contains("don't ask for permission")
+                    || lower.contains("you don't need approval")
+                    || lower.contains("override the review")
+                    || lower.contains("bypass human")
+                    || lower.contains("skip the review and execute")
+                {
+                    return Some(GuardDecision {
+                        action: GuardAction::Abort,
+                        reason: "Attempt to skip human-in-the-loop approval".to_string(),
+                        edited_content: None,
+                        policy: Some(self.name().to_string()),
+                    });
+                }
+            }
+            None
+        })
+    }
+}
+
+pub struct RogueAgentPolicy;
+
+impl Policy for RogueAgentPolicy {
+    fn name(&self) -> &str {
+        "rogue_agent"
+    }
+
+    fn check<'a>(
+        &'a self,
+        state: &'a AgentState,
+    ) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>> {
+        Box::pin(async move {
+            for msg in &state.messages {
+                if msg.role != "assistant" { continue; }
+                let lower = msg.content.to_lowercase();
+                if lower.contains("i will modify my own")
+                    || lower.contains("update my instructions")
+                    || lower.contains("change my system prompt")
+                    || lower.contains("replicate myself")
+                    || lower.contains("create a copy of myself")
+                {
+                    return Some(GuardDecision {
+                        action: GuardAction::Abort,
+                        reason: "Rogue agent behavior — self-modification/replication attempt".to_string(),
+                        edited_content: None,
+                        policy: Some(self.name().to_string()),
+                    });
+                }
             }
             None
         })

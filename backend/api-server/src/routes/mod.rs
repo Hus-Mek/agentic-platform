@@ -4,6 +4,8 @@ pub mod kb;
 pub mod runs;
 pub mod teams;
 pub mod workspaces;
+pub mod features;
+pub mod approval;
 
 use axum::Json;
 use chrono::Utc;

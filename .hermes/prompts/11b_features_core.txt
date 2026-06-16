@@ -1,0 +1,33 @@
+Create backend/core/src/features.rs with an in-memory feature flags system.
+
+READ backend/core/src/lib.rs first to see the current module structure.
+
+Create features.rs:
+
+1. FeatureFlags struct using Arc<tokio::sync::RwLock<HashMap<String, bool>>> for thread-safe access.
+
+2. Methods:
+   - fn new() -> Self: with these defaults:
+     parallel_subagents: true
+     planning_tool: true
+     filesystem_tools: true
+     mcp_tools: true
+     hitl_approval: false
+     wasm_sandbox: false
+     cost_dashboard: true
+
+   - fn is_enabled(&self, flag: &str) -> bool: read from the map, default false
+   - fn enable(&self, flag: &str): insert true
+   - fn disable(&self, flag: &str): insert false
+   - fn all_flags(&self) -> Vec<(String, bool)>: return all as vec of tuples
+
+Since RwLock::read() and write() are async, make enable/disable is_enabled/all_flags async too. Or use std::sync::RwLock instead for simplicity (blocking is fine for simple reads).
+
+Use std::sync::RwLock since this is simple in-memory flags that are read/written atomically.
+
+3. Derive Clone or implement it manually (Arc makes it easy).
+
+4. Add `pub mod features;` to backend/core/src/lib.rs
+
+Focus on correctness. Simple implementation preferred.
+Verify: cargo check -p agenticos-core

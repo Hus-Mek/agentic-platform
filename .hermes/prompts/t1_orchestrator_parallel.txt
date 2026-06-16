@@ -1,0 +1,27 @@
+In /c/Users/USER/agentic-platform/backend/agent-runtime/src/orchestrator.rs, add parallel sub-agent execution.
+
+READ THE FILE FIRST (all 535 lines).
+
+Current state: The PlanResult::ToolCalls arm (around line 102) has a for loop that processes tool_calls sequentially. When tc.name == "delegate", it calls self.run_sub_agent().await.
+
+Task: Add a parallel execution path when self.config.execution_mode == ExecutionMode::Parallel.
+
+1. Add import at top: use futures::future;
+
+2. In the PlanResult::ToolCalls arm, wrap the existing sequential loop in:
+   if self.config.execution_mode == ExecutionMode::Parallel {
+       self.run_parallel(tool_calls, &mut supervisor_state, &run_id, &workspace_id, &user_id, &mut delegations, &mut delegation_count).await?;
+   } else {
+       // existing sequential code unchanged
+   }
+
+3. Add run_parallel method to TeamOrchestrator:
+   - Partition tool_calls into delegates (name=="delegate") and regular
+   - For delegates: clone Arcs + needed data, tokio::spawn each sub-agent task
+   - Use futures::future::join_all(handles).await to collect results
+   - Process regular tools sequentially
+   - Handle JoinError gracefully
+
+4. Keep run_sub_agent method as-is (used by sequential path).
+
+Read the file. Make ALL edits in one pass. Verify cargo check -p agenticos-agent-runtime.

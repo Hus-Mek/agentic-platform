@@ -1,0 +1,33 @@
+In backend/agent-runtime/src/streaming.rs, integrate OpenTelemetry spans from agenticos_core::otel.
+
+READ THE FILE FIRST to understand the complete current structure.
+
+This is the streaming version of loop_mod.rs — same pattern applies.
+
+Available: agenticos_core::otel::{agent_run_span, tool_call_span, plan_step_span}
+
+Task: In the run_inner function (line 85), add OTel spans:
+
+1. Import: use agenticos_core::otel;
+
+2. At the START of the while loop (around line 98):
+   let _span = otel::agent_run_span(
+       state.agent_id.as_deref().unwrap_or("unknown"),
+       state.run_id.as_deref().unwrap_or("unknown"),
+       state.workspace_id.as_deref().unwrap_or("unknown"),
+   ).entered();
+
+3. Wrap the plan_step call (around line 101):
+   let plan_result = {
+       let _span = otel::plan_step_span(state.iteration, &state.model);
+       plan_step(state, llm_client, memory_client, kb_retriever).await?
+   };
+
+4. Wrap the tool_registry.execute() call (around line 208-216):
+   let exec_result = {
+       let _span = otel::tool_call_span(&tool_call.name, state.run_id.as_deref().unwrap_or(""));
+       tool_registry.execute(&mut core_tc, state.workspace_id.as_deref(), state.run_id.as_deref(), state.agent_id.as_deref()).await
+   };
+
+Focus on correctness. Make all edits in one pass.
+Verify: cargo check -p agenticos-agent-runtime

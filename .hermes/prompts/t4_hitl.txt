@@ -1,0 +1,31 @@
+Add HITL approval. 4 edits, different files:
+
+A) /c/Users/USER/agentic-platform/backend/agent-runtime/src/tool.rs:
+Add field to ToolRegistry: approval_store: std::sync::Arc<crate::approval::ApprovalStore>
+Init in ToolRegistry::new(): approval_store: std::sync::Arc::new(crate::approval::ApprovalStore::new())
+In execute(), after getting the tool, before calling handler:
+  if tool.metadata.requires_approval {
+      let id = self.approval_store.create_request(run_id.unwrap_or(""), agent_id.unwrap_or(""), &tool_call.name, tool_call.args.clone()).await;
+      return Err(anyhow::anyhow!("APPROVAL_REQUIRED:{}", id));
+  }
+
+B) /c/Users/USER/agentic-platform/backend/agent-runtime/src/loop_mod.rs:
+In the exec_result match, add arm BEFORE the generic Err(e):
+  Err(ref e) if e.to_string().starts_with("APPROVAL_REQUIRED:") => {
+      let approval_id = e.to_string().trim_start_matches("APPROVAL_REQUIRED:").to_string();
+      tracing::info!(approval_id = %approval_id, "Tool paused for approval");
+      state.add_message(agenticos_core::state::Message::tool_result(&tc.name, &core_tc.id, &format!("APPROVAL_REQUIRED:{}", approval_id)));
+      return Ok(());
+  }
+
+C) Create /c/Users/USER/agentic-platform/backend/api-server/src/routes/approval.rs:
+3 endpoints using state.tool_registry.approval_store:
+- GET /api/approvals -> list_pending()
+- POST /api/approvals/{id}/approve -> approve()
+- POST /c/Users/USER/agentic-platform/api/approvals/{id}/reject -> reject()
+Use same patterns as other routes (internal_error helper, etc.)
+
+D) /c/Users/USER/agentic-platform/backend/api-server/src/routes/mod.rs: add `pub mod approval;`
+E) /c/Users/USER/agentic-platform/backend/api-server/src/lib.rs: add approval routes to protected_routes.
+
+Read files first. Make all edits. Verify cargo check --workspace.

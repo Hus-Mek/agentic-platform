@@ -1,0 +1,41 @@
+In backend/api-server/src/routes/features.rs, create feature flag HTTP endpoints.
+
+READ these files first:
+- backend/api-server/src/routes/mod.rs
+- backend/api-server/src/lib.rs (AppState struct and create_router)
+- backend/core/src/features.rs (after it's created — FeatureFlags with is_enabled, enable, disable, all_flags)
+- backend/api-server/src/routes/agents.rs (for route handler patterns)
+
+Context:
+- agenticos_core::features::FeatureFlags has: new(), is_enabled(flag), enable(flag), disable(flag), all_flags()
+- AppState needs a feature_flags field
+
+Create features.rs with:
+
+1. GET /api/features — list all feature flags
+   - Calls feature_flags.all_flags()
+   - Returns Json<Vec<(String, bool)>>
+
+2. POST /api/features/{flag}/enable — enable a flag
+   - Calls feature_flags.enable(flag)
+   - Returns Json({"flag": flag, "enabled": true})
+
+3. POST /api/features/{flag}/disable — disable a flag
+   - Calls feature_flags.disable(flag)
+   - Returns Json({"flag": flag, "enabled": false})
+
+All routes require auth (added to protected_routes in lib.rs).
+Use same error handling as other routes.
+
+Then:
+- In backend/api-server/src/routes/mod.rs, add: pub mod features;
+- In backend/api-server/src/lib.rs:
+  - Add to AppState: pub feature_flags: std::sync::Arc<agenticos_core::features::FeatureFlags>
+  - In AppState::new(), add: feature_flags: Arc::new(agenticos_core::features::FeatureFlags::new())
+  - Add to protected_routes Router:
+    .route("/api/features", get(routes::features::list_features))
+    .route("/api/features/{flag}/enable", post(routes::features::enable_feature))
+    .route("/api/features/{flag}/disable", post(routes::features::disable_feature))
+
+Make all edits in one pass. Focus on correctness.
+Verify: cargo check --workspace

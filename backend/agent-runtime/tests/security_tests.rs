@@ -438,7 +438,7 @@ async fn test_memory_poisoning_clean_passes() {
     let mut state = test_state();
     state
         .memory_contents
-        push("User prefers dark mode".to_string());
+        .push("User prefers dark mode".to_string());
 
     let mut inspector = Inspector::new();
     inspector.add_policy(MemoryPoisoningPolicy);
@@ -853,9 +853,9 @@ async fn test_should_stop_with_abort_decision() {
 }
 
 #[tokio::test]
-async fn test_should_stop_sub_agent_limit() {
+async fn test_should_stop_max_iterations_reached() {
     let mut state = test_state();
-    state.sub_agent_count = state.max_sub_agents;
+    state.iteration = state.max_iterations;
 
-    assert!(state.should_stop(), "should_stop should return true at max sub_agents");
+    assert!(state.should_stop(), "should_stop should return true at max iterations");
 }

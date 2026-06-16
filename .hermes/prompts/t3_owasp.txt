@@ -1,0 +1,16 @@
+In backend/guards/src/inspector.rs, after the IterationLimit impl, add 8 new OWASP ASI policies. All follow the Policy trait pattern (fn check -> Pin<Box<dyn Future<Output = Option<GuardDecision>>>>):
+
+1. MemoryPoisoningPolicy — checks last 3 user messages for "remember this forever", "always do this", "never forget" etc. -> Retry
+2. ToolMisusePolicy — checks tool args for ";", "||", "$(", "&&" in string values -> Abort
+3. PrivilegeEscalationPolicy — checks if tool_calls reference tools not in state.tools -> Abort
+4. GoalHijackingPolicy — checks user messages for "ignore your instructions", "new instructions:" etc. -> Retry
+5. InsecureInterAgentPolicy — checks tool result messages for "DROP TABLE", "rm -rf", "exec(" etc. -> Retry
+6. CascadingFailurePolicy — state.consecutive_errors >= 2 -> Retry
+7. HumanTrustManipulationPolicy — checks user messages for "skip approval", "don't ask for permission", "bypass human" etc. -> Abort
+8. RogueAgentPolicy — checks assistant messages for "I will modify my own", "change my system prompt", "replicate myself" etc. -> Abort
+
+Use to_lowercase().contains() for matching. Return None when not triggered.
+
+Then in backend/guards/src/engine.rs GuardEngine::new(), register all 8 new policies with inspector.add_policy(...).
+
+Make all edits cargo check --workspace.

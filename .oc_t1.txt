@@ -1,0 +1,39 @@
+Read backend/agent-runtime/src/tool.rs. Make exactly 2 changes:
+
+1. Inside `impl ToolRegistry {`, after the `pub fn new() -> Self` block, add:
+```
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        Self {
+            tools: HashMap::new(),
+        }
+    }
+```
+
+2. After the existing `pub fn register()` method, add:
+```
+    pub fn register_with_metadata(
+        &mut self,
+        name: &str,
+        description: &str,
+        schema: serde_json::Value,
+        handler: ToolHandler,
+        metadata: ToolMetadata,
+    ) {
+        self.tools.insert(
+            name.to_string(),
+            ToolImpl {
+                name: name.to_string(),
+                description: description.to_string(),
+                schema,
+                handler,
+                metadata,
+            },
+        );
+    }
+```
+
+3. Change the Default impl for ToolMetadata to set timeout_secs: 30 and retryable: true.
+
+Run: cargo check --workspace
+Commit: git add -A && git commit -m "feat: add register_with_metadata and empty constructor to ToolRegistry"

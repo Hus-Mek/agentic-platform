@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use agenticos_core::state::*;
+use futures::future;
 use uuid::Uuid;
 
 use crate::loop_mod::run_agent;
@@ -100,70 +101,161 @@ impl TeamOrchestrator {
                     break;
                 }
                 PlanResult::ToolCalls(tool_calls) => {
-                    for tc in &tool_calls {
-                        if tc.name == "delegate" {
-                            delegation_count += 1;
-                            let sub_agent_id = tc
-                                .args
+                    if self.config.execution_mode == ExecutionMode::Parallel
+                        && tool_calls.iter().any(|tc| tc.name == "delegate")
+                    {
+                        let (delegates, regular): (Vec<_>, Vec<_>) =
+                            tool_calls.into_iter().partition(|tc| tc.name == "delegate");
+
+                        let sub_agents = self.config.sub_agents.clone();
+                        let llm = self.llm_client.clone();
+                        let registry = Arc::clone(&self.tool_registry);
+                        let guards = Arc::clone(&self.guard_engine);
+                        let memory = Arc::clone(&self.memory_client);
+                        let db = self.db.clone();
+                        let run_id_str = run_id.clone();
+                        let ws_id = workspace_id.clone();
+                        let uid = user_id.clone();
+
+                        let mut handles = Vec::new();
+                        for tc in &delegates {
+                            let tc_args = tc.args.clone();
+                            let sub_agent_id = tc_args
                                 .get("sub_agent_id")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("")
                                 .to_string();
-                            let task = tc
-                                .args
+                            let task = tc_args
                                 .get("task")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("")
                                 .to_string();
+                            let sa_config = sub_agents.iter().find(|sa| sa.id == sub_agent_id).cloned();
+                            let llm = llm.clone();
+                            let reg = Arc::clone(&registry);
+                            let ge = Arc::clone(&guards);
+                            let mem = Arc::clone(&memory);
+                            let pool = db.clone();
+                            let pid = run_id_str.clone();
+                            let wid = ws_id.clone();
+                            let usr = uid.clone();
 
-                            tracing::info!(
-                                sub_agent_id = %sub_agent_id,
-                                task = %task,
-                                delegation = delegation_count,
-                                "Supervisor delegating task"
-                            );
+                            handles.push(tokio::spawn(async move {
+                                match sa_config {
+                                    Some(sa) => {
+                                        let sub_run_id = format!("{}_{}", pid, sa.id);
+                                        let mut sub_state = AgentState::new(
+                                            Some(sa.id.clone()),
+                                            Some(sub_run_id),
+                                            wid.clone(),
+                                            usr.clone(),
+                                            &sa.instructions,
+                                            &sa.model,
+                                        );
+                                        sub_state.max_iterations = 10;
+                                        sub_state.tools = sa.tools.clone();
+                                        sub_state.guard_config = sa.guard_config.clone();
+                                        sub_state.add_message(Message::new("user", &task));
 
-                            let sub_agent = self
-                                .config
-                                .sub_agents
-                                .iter()
-                                .find(|sa| sa.id == sub_agent_id)
-                                .cloned();
+                                        let _ = crate::loop_mod::run_agent(
+                                            &mut sub_state, &llm, &reg, &ge, &mem, None, &pool,
+                                        )
+                                        .await;
 
-                            let delegate_result = match sub_agent {
-                                Some(sa) => {
-                                    self.run_sub_agent(&sa, &task, &run_id, &workspace_id, &user_id)
-                                        .await
+                                        let output = sub_state
+                                            .messages
+                                            .iter()
+                                            .rev()
+                                            .find(|m| m.role == "assistant" && !m.content.is_empty())
+                                            .map(|m| m.content.clone())
+                                            .unwrap_or_default();
+
+                                        (
+                                            tc_args.clone(),
+                                            DelegationResult {
+                                                sub_agent_id: sa.id,
+                                                sub_agent_name: sa.name,
+                                                task,
+                                                result: output,
+                                                tokens_used: sub_state.total_tokens_used,
+                                                cost: sub_state.total_cost,
+                                                duration_ms: 0,
+                                                success: true,
+                                                error: None,
+                                            },
+                                        )
+                                    }
+                                    None => (
+                                        tc_args.clone(),
+                                        DelegationResult {
+                                            sub_agent_id: sub_agent_id.clone(),
+                                            sub_agent_name: "unknown".to_string(),
+                                            task,
+                                            result: String::new(),
+                                            tokens_used: 0,
+                                            cost: 0.0,
+                                            duration_ms: 0,
+                                            success: false,
+                                            error: Some(format!(
+                                                "Sub-agent '{}' not found",
+                                                sub_agent_id
+                                            )),
+                                        },
+                                    ),
                                 }
-                                None => DelegationResult {
-                                    sub_agent_id: sub_agent_id.clone(),
-                                    sub_agent_name: "unknown".to_string(),
-                                    task: task.clone(),
-                                    result: String::new(),
-                                    tokens_used: 0,
-                                    cost: 0.0,
-                                    duration_ms: 0,
-                                    success: false,
-                                    error: Some(format!(
-                                        "Sub-agent '{}' not found in team config",
-                                        sub_agent_id
-                                    )),
-                                },
-                            };
+                            }));
+                        }
 
-                            let output = if delegate_result.success {
-                                delegate_result.result.clone()
-                            } else {
-                                format!(
-                                    "Sub-agent error: {}",
-                                    delegate_result.error.as_deref().unwrap_or("unknown error")
-                                )
-                            };
+                        let results = futures::future::join_all(handles).await;
+                        for result in results {
+                            match result {
+                                Ok((args, delegation_result)) => {
+                                    delegation_count += 1;
+                                    let output = if delegation_result.success {
+                                        delegation_result.result.clone()
+                                    } else {
+                                        format!(
+                                            "Sub-agent error: {}",
+                                            delegation_result
+                                                .error
+                                                .as_deref()
+                                                .unwrap_or("unknown error")
+                                        )
+                                    };
+                                    let tc_id = args
+                                        .get("sub_agent_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("delegate");
+                                    supervisor_state.add_message(Message::tool_result(
+                                        "delegate",
+                                        tc_id,
+                                        &output,
+                                    ));
+                                    delegations.push(delegation_result);
+                                }
+                                Err(join_err) => {
+                                    delegation_count += 1;
+                                    let err_msg =
+                                        format!("Sub-agent task panicked: {:?}", join_err);
+                                    supervisor_state.add_message(Message::tool_result(
+                                        "delegate", "unknown", &err_msg,
+                                    ));
+                                    delegations.push(DelegationResult {
+                                        sub_agent_id: "unknown".into(),
+                                        sub_agent_name: "unknown".into(),
+                                        task: String::new(),
+                                        result: String::new(),
+                                        tokens_used: 0,
+                                        cost: 0.0,
+                                        duration_ms: 0,
+                                        success: false,
+                                        error: Some(err_msg),
+                                    });
+                                }
+                            }
+                        }
 
-                            supervisor_state
-                                .add_message(Message::tool_result(&tc.name, &tc.id, &output));
-                            delegations.push(delegate_result);
-                        } else {
+                        for tc in regular {
                             let mut core_tc =
                                 agenticos_core::state::ToolCall::new(&tc.name, tc.args.clone());
                             let exec_result = self
@@ -199,9 +291,110 @@ impl TeamOrchestrator {
                                 }
                             }
                         }
-                    }
+                    } else {
+                        for tc in &tool_calls {
+                            if tc.name == "delegate" {
+                                delegation_count += 1;
+                                let sub_agent_id = tc
+                                    .args
+                                    .get("sub_agent_id")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let task = tc
+                                    .args
+                                    .get("task")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
 
-                    supervisor_state.increment_iteration();
+                                tracing::info!(
+                                    sub_agent_id = %sub_agent_id,
+                                    task = %task,
+                                    delegation = delegation_count,
+                                    "Supervisor delegating task"
+                                );
+
+                                let sub_agent = self
+                                    .config
+                                    .sub_agents
+                                    .iter()
+                                    .find(|sa| sa.id == sub_agent_id)
+                                    .cloned();
+
+                                let delegate_result = match sub_agent {
+                                    Some(sa) => {
+                                        self.run_sub_agent(&sa, &task, &run_id, &workspace_id, &user_id)
+                                            .await
+                                    }
+                                    None => DelegationResult {
+                                        sub_agent_id: sub_agent_id.clone(),
+                                        sub_agent_name: "unknown".to_string(),
+                                        task: task.clone(),
+                                        result: String::new(),
+                                        tokens_used: 0,
+                                        cost: 0.0,
+                                        duration_ms: 0,
+                                        success: false,
+                                        error: Some(format!(
+                                            "Sub-agent '{}' not found in team config",
+                                            sub_agent_id
+                                        )),
+                                    },
+                                };
+
+                                let output = if delegate_result.success {
+                                    delegate_result.result.clone()
+                                } else {
+                                    format!(
+                                        "Sub-agent error: {}",
+                                        delegate_result.error.as_deref().unwrap_or("unknown error")
+                                    )
+                                };
+
+                                supervisor_state
+                                    .add_message(Message::tool_result(&tc.name, &tc.id, &output));
+                                delegations.push(delegate_result);
+                            } else {
+                                let mut core_tc =
+                                    agenticos_core::state::ToolCall::new(&tc.name, tc.args.clone());
+                                let exec_result = self
+                                    .tool_registry
+                                    .execute(
+                                        &mut core_tc,
+                                        supervisor_state.workspace_id.as_deref(),
+                                        supervisor_state.run_id.as_deref(),
+                                        supervisor_state.agent_id.as_deref(),
+                                    )
+                                    .await;
+
+                                match exec_result {
+                                    Ok(output) => {
+                                        supervisor_state.add_message(Message::tool_result(
+                                            &tc.name,
+                                            &core_tc.id,
+                                            &output,
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        let err_msg = format!("{:?}", e);
+                                        tracing::warn!(
+                                            tool = %tc.name,
+                                            error = %err_msg,
+                                            "Regular tool execution failed"
+                                        );
+                                        supervisor_state.add_message(Message::tool_result(
+                                            &tc.name,
+                                            &core_tc.id,
+                                            &err_msg,
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+
+                        supervisor_state.increment_iteration();
+                    }
                 }
                 PlanResult::Stop | PlanResult::Retry => {
                     break;

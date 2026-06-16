@@ -212,6 +212,12 @@ async fn run_inner(
                     let exec_duration = exec_start.elapsed().as_millis() as i64;
 
                     match exec_result {
+                        Err(ref e) if e.to_string().starts_with("APPROVAL_REQUIRED:") => {
+                            let approval_id = e.to_string().trim_start_matches("APPROVAL_REQUIRED:").to_string();
+                            tracing::info!(approval_id = %approval_id, tool = %tc.name, "Tool paused — awaiting human approval");
+                            state.add_message(agenticos_core::state::Message::tool_result(&tc.name, &core_tc.id, &format!("APPROVAL_REQUIRED:{}", approval_id)));
+                            return Ok(());
+                        }
                         Ok(output) => {
                             state.add_message(
                                 agenticos_core::state::Message::tool_result(

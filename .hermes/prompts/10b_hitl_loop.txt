@@ -1,0 +1,32 @@
+In backend/agent-runtime/src/loop_mod.rs, handle HITL approval errors in the agent loop.
+
+READ THE FILE FIRST.
+
+Context:
+- ToolRegistry::execute() now returns Err with message "APPROVAL_REQUIRED:{id}" when a tool requires approval.
+- The agent loop should catch this and pause the run.
+
+Task: In the tool execution section (around line 196-306):
+
+In the match exec_result block, handle approval errors. Find the existing:
+   Ok(output) => { ... }  // line 210
+   Err(e) => { ... }      // line 277
+
+BETWEEN Ok and Err, add a new arm:
+   Err(ref e) if e.to_string().starts_with("APPROVAL_REQUIRED:") => {
+       let approval_id = e.to_string()
+           .trim_start_matches("APPROVAL_REQUIRED:")
+           .to_string();
+       tracing::info!(approval_id = %approval_id, tool = %tc.name,
+           "Tool execution paused — awaiting human approval");
+       state.add_message(agenticos_core::state::Message::tool_result(
+           &tc.name, &core_tc.id,
+           &format!("APPROVAL_REQUIRED:{}", approval_id),
+       ));
+       return Ok(());
+   }
+
+This should come BEFORE the generic Err(e) arm. In Rust, match arms are evaluated in order.
+
+Make all edits in one pass. Focus on correctness.
+Verify: cargo check -p agenticos-agent-runtime

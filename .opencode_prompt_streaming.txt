@@ -1,14 +1,23 @@
-Fix streaming error handling in backend/api-server/src/routes/agents.rs.
+Modify backend/agent-runtime/src/streaming.rs in the workspace at C:\Users\USER/agentic-platform/backend.
 
-In the run_agent_stream function (around line 568-708), when the spawned tokio task encounters an error:
-1. It sends StreamEvent::Error to the channel (this is good)
-2. BUT it never updates the DB run status to failed (this is bad)
+Read the file first. Then make these edits:
 
-In the Err branch of the spawned task (around line 693-698), add a DB update:
-- Execute: UPDATE runs SET status = 'failed', error = $1 WHERE id = $2
-- Use the existing db variable and run_id_str variable
-- Use .execute(&db).await and ignore errors with let _ =
+1. After `use crate::tool::ToolRegistry;` add:
+```rust
+use crate::context::{ContextConfig, ContextManager};
+```
 
-Also: the run is inserted with status 'running' at the start of the function. If this INSERT fails, the function returns early. This is fine, but add a map_err to convert the error properly.
+2. In the `run_inner` async function, find `while !state.should_stop() {` (around line 98). Inside the loop, add context window management right after the opening brace:
 
-Work fast. Make all edits in one pass.
+```rust
+        let _context_mgr = ContextManager::new(ContextConfig::default());
+        _context_mgr.maybe_prune(&mut state.messages);
+```
+
+This goes right after the `while` loop opening `{` and before `let tokens_before = ...`.
+
+After editing, verify:
+1. cargo check --workspace
+2. cargo test -p agenticos-agent-runtime
+
+Do NOT edit any other files.

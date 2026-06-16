@@ -8,8 +8,10 @@ pub mod plan;
 pub mod rag;
 pub mod recovery;
 pub mod responder;
+pub mod sandbox;
 pub mod streaming;
 pub mod tool;
+pub mod approval;
 
 pub use context::{ContextConfig, ContextManager};
 pub use loop_mod::run_agent;

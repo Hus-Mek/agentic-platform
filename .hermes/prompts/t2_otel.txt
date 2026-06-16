@@ -1,0 +1,17 @@
+Add OTel spans to the agent loop. 3 edits, different files, no conflicts:
+
+A) /c/Users/USER/agentic-platform/backend/agent-runtime/src/loop_mod.rs:
+Add `use agenticos_core::otel;` at top.
+In run_inner() while loop body, at the very start add:
+  let _span = otel::agent_run_span(state.agent_id.as_deref().unwrap_or(""), state.run_id.as_deref().unwrap_or(""), state.workspace_id.as_deref().unwrap_or("")).entered();
+Wrap the plan_step call: let _ps = otel::plan_step_span(state.iteration, &state.model);
+Wrap the tool_registry.execute() call: let _ts = otel::tool_call_span(&tc.name, state.run_id.as_deref().unwrap_or(""));
+
+B) /c/Users/USER/agentic-platform/backend/agent-runtime/src/streaming.rs:
+Same pattern: add otel import, agent_run_span at loop start, wrap plan_step and execute with otel spans.
+
+C) /c/Users/USER/agentic-platform/backend/api-server/src/main.rs:
+Replace the tracing_subscriber::fmt()...init() block (lines 9-15) with:
+  agenticos_core::otel::init_otel("agenticos-api-server")?;
+
+Read each file first. Make all edits. Verify cargo check --workspace.

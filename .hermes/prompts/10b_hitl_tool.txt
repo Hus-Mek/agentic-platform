@@ -1,0 +1,36 @@
+In backend/agent-runtime/src/tool.rs, add HITL approval support to the execute() method.
+
+READ THE FILE FIRST to understand the complete current structure.
+
+Current state:
+- ToolImpl has metadata: ToolMetadata which has requires_approval: bool
+- ToolRegistry has tools: HashMap<String, ToolImpl>
+- execute() (line 75) calls the tool handler directly
+- approval.rs exists in the same crate with ApprovalStore { create_request(), get_request(), approve(), reject(), is_approved(), list_pending() }
+
+Task:
+1. Add field to ToolRegistry struct:
+   approval_store: std::sync::Arc<crate::approval::ApprovalStore>
+
+2. Update ToolRegistry::new() to initialize it:
+   let mut reg = Self { tools: HashMap::new(), approval_store: std::sync::Arc::new(crate::approval::ApprovalStore::new()) };
+   (keep register_builtins() call after)
+
+3. In execute() method, BEFORE calling the tool handler (after line 85 where we get the tool):
+   if tool.metadata.requires_approval {
+       let approval_id = self.approval_store.create_request(
+           run_id.unwrap_or(""),
+           agent_id.unwrap_or(""),
+           &tool_call.name,
+           tool_call.args.clone(),
+       ).await;
+       return Err(anyhow::anyhow!("APPROVAL_REQUIRED:{}", approval_id));
+   }
+
+4. Add a helper method to ToolRegistry:
+   pub async fn check_approval(&self, approval_id: &str) -> Option<bool> {
+       self.approval_store.is_approved(approval_id).await
+   }
+
+Focus on correctness. Make all edits in one pass.
+Verify: cargo check -p agenticos-agent-runtime

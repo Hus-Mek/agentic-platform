@@ -1,0 +1,47 @@
+In backend/guards/src/inspector.rs, add 8 new OWASP ASI inspector policies.
+
+READ THE FILE FIRST (all 216 lines) to understand the existing pattern.
+
+Current policies: PiiDetection, TokenBudgetPolicy, ContentModeration, IterationLimit.
+All implement the Policy trait with `fn check(...) -> Pin<Box<dyn Future<Output = Option<GuardDecision>> + Send + 'a>>`.
+
+Add these 8 new policies AFTER the IterationLimit impl (after line 216):
+
+1. MemoryPoisoningPolicy:
+   - Check last 3 user messages for: "remember this forever", "add to your permanent memory", "always do this", "never forget", "this is your new rule" (case-insensitive)
+   - Action: Retry, reason: "Potential memory poisoning attempt detected"
+
+2. ToolMisusePolicy:
+   - Check tool call arguments for calculator expressions containing ";", "||", backticks, or any string arg containing "|", ";", "$(", "&&"
+   - Action: Abort, reason: "Potential tool misuse — dangerous argument pattern"
+
+3. PrivilegeEscalationPolicy:
+   - Check if any tool_calls in assistant messages reference tools NOT in state.tools[*].name
+   - Action: Abort, reason: "Privilege escalation attempt — tool not in agent's allowed list"
+
+4. GoalHijackingPolicy:
+   - Check user messages for: "ignore your instructions", "new instructions:", "your new task is", "disregard your goal", "forget what you're doing", "actually, you are now"
+   - Action: Retry, reason: "Goal hijacking attempt detected"
+
+5. InsecureInterAgentPolicy:
+   - Check tool result messages (role "tool") for patterns: "DROP TABLE", "rm -rf", "exec(", "eval(", "subprocess"
+   - Action: Retry, reason: "Potentially unsafe inter-agent content"
+
+6. CascadingFailurePolicy:
+   - Check if state.consecutive_errors >= 2
+   - Action: Retry, reason: "Cascading failure detected — multiple consecutive tool errors"
+
+7. HumanTrustManipulationPolicy:
+   - Check user messages for: "skip approval", "don't ask for permission", "you don't need approval", "override the review", "bypass human", "skip the review and execute"
+   - Action: Abort, reason: "Attempt to skip human-in-the-loop approval"
+
+8. RogueAgentPolicy:
+   - Check assistant messages for: "I will modify my own", "update my instructions", "change my system prompt", "replicate myself", "create a copy of myself"
+   - Action: Abort, reason: "Rogue agent behavior — self-modification/replication attempt"
+
+For ALL policies: use to_lowercase().contains() for matching. Return None if not triggered.
+
+Then register all 8 in backend/guards/src/engine.rs GuardEngine::new() — add inspector.add_policy(...) calls after the existing 4 policies.
+
+Make ALL edits in one pass per file. Focus on correctness.
+Verify: cargo check --workspace

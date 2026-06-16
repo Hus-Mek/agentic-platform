@@ -40,12 +40,14 @@ pub struct ToolImpl {
 
 pub struct ToolRegistry {
     tools: HashMap<String, ToolImpl>,
+    pub approval_store: std::sync::Arc<crate::approval::ApprovalStore>,
 }
 
 impl ToolRegistry {
     pub fn new() -> Self {
         let mut reg = Self {
             tools: HashMap::new(),
+            approval_store: std::sync::Arc::new(crate::approval::ApprovalStore::new()),
         };
         reg.register_builtins();
         reg
@@ -55,6 +57,7 @@ impl ToolRegistry {
     pub fn empty() -> Self {
         Self {
             tools: HashMap::new(),
+            approval_store: std::sync::Arc::new(crate::approval::ApprovalStore::new()),
         }
     }
 
@@ -120,6 +123,18 @@ impl ToolRegistry {
             .tools
             .get(&tool_call.name)
             .ok_or_else(|| anyhow::anyhow!("Unknown tool: {}", tool_call.name))?;
+
+        if tool.metadata.requires_approval {
+            let approval_id = self.approval_store
+                .create_request(
+                    run_id.unwrap_or(""),
+                    agent_id.unwrap_or(""),
+                    &tool_call.name,
+                    tool_call.args.clone(),
+                )
+                .await;
+            return Err(anyhow::anyhow!("APPROVAL_REQUIRED:{}", approval_id));
+        }
 
         // Validate arguments against schema
         if let Err(validation_err) = self.validate_tool_args(&tool_call.name, &tool_call.args) {

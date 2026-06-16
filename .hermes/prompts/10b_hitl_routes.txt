@@ -1,0 +1,42 @@
+Create backend/api-server/src/routes/approval.rs with HITL approval HTTP endpoints.
+
+READ these files first:
+- backend/api-server/src/routes/mod.rs (to see module declarations)
+- backend/api-server/src/lib.rs (to see AppState and router patterns)
+- backend/api-server/src/routes/agents.rs (to see route handler patterns — error handling, auth, State usage)
+- backend/agent-runtime/src/approval.rs (to see ApprovalStore and ApprovalRequest types)
+
+Context:
+- AppState has tool_registry: Arc<ToolRegistry> which has approval_store: Arc<ApprovalStore>
+- ApprovalStore methods: list_pending(), get_request(id), approve(id), reject(id)
+- ApprovalRequest fields: id, run_id, agent_id, tool_name, tool_args, status, created_at
+
+Create approval.rs with:
+
+1. GET /api/approvals — list all pending approval requests
+   - Extract approval_store from state
+   - Call list_pending().await
+   - Return Json<Vec<ApprovalRequest>>
+
+2. POST /api/approvals/{id}/approve — approve a request
+   - Extract id from path
+   - Call approve(id).await
+   - Return Json({"approved": true, "id": id})
+
+3. POST /api/approvals/{id}/reject — reject a request
+   - Extract id from path
+   - Call reject(id).await
+   - Return Json({"rejected": true, "id": id})
+
+Use the same error handling patterns as other routes (internal_error, bad_request, not_found helper functions).
+All routes require auth (they'll be added to protected_routes in lib.rs).
+
+Then:
+- In backend/api-server/src/routes/mod.rs, add: pub mod approval;
+- In backend/api-server/src/lib.rs, add to protected_routes Router:
+  .route("/api/approvals", get(routes::approval::list_approvals))
+  .route("/api/approvals/{id}/approve", post(routes::approval::approve_request))
+  .route("/api/approvals/{id}/reject", post(routes::approval::reject_request))
+
+Make all edits in one pass. Focus on correctness.
+Verify: cargo check --workspace

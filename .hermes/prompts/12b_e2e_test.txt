@@ -1,0 +1,94 @@
+Create backend/api-server/tests/e2e_test.rs with end-to-end integration tests.
+
+READ these files first:
+- backend/api-server/src/lib.rs (AppState, create_router)
+- backend/api-server/src/routes/auth.rs (register/login request/response shapes)
+- backend/api-server/src/routes/agents.rs (create agent request/response shapes)
+- backend/api-server/Cargo.toml (dev-dependencies — should have reqwest, tokio, serde_json)
+- backend/agent-runtime/tests/security_tests.rs (test patterns used in this project)
+
+Context:
+- The test starts the server and makes HTTP requests against it
+- Uses reqwest or axum::testing
+- Needs a DATABASE_URL set for the test database
+- Dev dependencies include: reqwest, tokio, serde_json, tower, tower-http
+
+Create e2e_test.rs:
+
+```rust
+#[tokio::test]
+async fn test_health_check() {
+    // Skip if DATABASE_URL is not set
+    let db_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            eprintln!("Skipping E2E test — DATABASE_URL not set");
+            return;
+        }
+    };
+
+    // Setup
+    let _ = dotenvy::dotenv();
+    let config = agenticos_core::config::AppConfig::from_env();
+    let pool = sqlx::PgPool::connect(&db_url).await.unwrap();
+    sqlx::migrate!("./infra/migrations").run(&pool).await.ok();
+
+    let state = agenticos_api_server::AppState::new(config, pool).await;
+    let app = agenticos_api_server::create_router(state);
+
+    // Test health endpoint
+    let response = axum::http::Request::builder()
+        .uri("/health")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = tower::ServiceExt::ready(&mut app.into_service())
+        .await.unwrap()
+        .call(response).await.unwrap();
+    assert_eq!(response.status(), 200);
+}
+
+#[tokio::test]
+async fn test_auth_register_and_login() {
+    let db_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            eprintln!("Skipping E2E test — DATABASE_URL not set");
+            return;
+        }
+    };
+
+    let _ = dotenvy::dotenv();
+    let config = agenticos_core::config::AppConfig::from_env();
+    let pool = sqlx::PgPool::connect(&db_url).await.unwrap();
+    sqlx::migrate!("./infra/migrations").run(&pool).await.ok();
+
+    let state = agenticos_api_server::AppState::new(config, pool).await;
+    let app = agenticos_api_server::create_router(state);
+
+    let workspace_id = uuid::Uuid::new_v4().to_string();
+    let email = format!("test_e2e_{}@example.com", uuid::Uuid::new_v4());
+    let password = "testpass123";
+
+    // Register
+    let body = serde_json::json!({
+        "email": email,
+        "password": password,
+        "workspace_id": workspace_id,
+    });
+    let response = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/auth/register")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(body.to_string()))
+        .unwrap();
+    let response = tower::ServiceExt::ready(&mut app.into_service())
+        .await.unwrap()
+        .call(response).await.unwrap();
+    assert_eq!(response.status(), 200);
+}
+```
+
+Keep it simple — just test health check and auth register. The full flow test can be added later.
+
+Make all edits in one pass. Focus on correctness.
+Verify: cargo check -p api-server (at least compiles)
