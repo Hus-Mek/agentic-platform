@@ -17,7 +17,7 @@ pub async fn execute_plan(
     tool_registry: &ToolRegistry,
 ) -> anyhow::Result<()> {
     while !execution.is_complete() {
-        let step_idx = execution.current_index;
+        let _step_idx = execution.current_index;
         let step_desc = execution
             .current_step()
             .map(|s| s.description.clone())

@@ -141,7 +141,7 @@ pub async fn plan_step(
         }
     }
 
-    let system_prompt = build_system_prompt(state).await;
+    let system_prompt = crate::prompt_builder::build_system_prompt(state, &state.memory_contents);
 
     let mut api_messages = vec![Message {
         id: "system".into(),
@@ -248,20 +248,4 @@ pub async fn plan_step(
     }
 
     Ok(PlanResult::Stop)
-}
-
-async fn build_system_prompt(state: &AgentState) -> String {
-    let mut parts = vec![state.instructions.clone()];
-
-    if state.memory_config.enabled && !state.memory_contents.is_empty() {
-        let memories = state.memory_contents.join("\n- ");
-        parts.push(format!("\n\n[Relevant memories]\n- {}", memories));
-    }
-
-    if state.memory_config.enabled && !state.kb_contents.is_empty() {
-        let knowledge = state.kb_contents.join("\n");
-        parts.push(format!("\n\n[Relevant knowledge]\n{}", knowledge));
-    }
-
-    parts.join("\n")
 }

@@ -6,6 +6,7 @@ pub mod memory_extractor;
 pub mod orchestrator;
 pub mod plan;
 pub mod plan_executor;
+pub mod prompt_builder;
 pub mod rag;
 pub mod recovery;
 pub mod responder;
