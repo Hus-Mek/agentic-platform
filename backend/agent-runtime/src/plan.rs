@@ -13,6 +13,83 @@ pub enum PlanResult {
     Retry,
 }
 
+// ── Multi-step planning types ──────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlanStepStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+    Replanned,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlanStep {
+    pub id: String,
+    pub description: String,
+    pub status: PlanStepStatus,
+    pub tool_call: Option<CoreToolCall>,
+    pub result: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlanExecution {
+    pub steps: Vec<PlanStep>,
+    pub current_index: usize,
+    pub replan_count: u32,
+}
+
+impl PlanExecution {
+    pub fn new(steps: Vec<PlanStep>) -> Self {
+        Self {
+            steps,
+            current_index: 0,
+            replan_count: 0,
+        }
+    }
+
+    pub fn current_step(&self) -> Option<&PlanStep> {
+        self.steps.get(self.current_index)
+    }
+
+    pub fn current_step_mut(&mut self) -> Option<&mut PlanStep> {
+        self.steps.get_mut(self.current_index)
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.current_index >= self.steps.len()
+    }
+
+    pub fn mark_current_completed(&mut self, result: String) {
+        if let Some(step) = self.current_step_mut() {
+            step.status = PlanStepStatus::Completed;
+            step.result = Some(result);
+        }
+        self.current_index += 1;
+    }
+
+    pub fn mark_current_failed(&mut self, error: String) {
+        if let Some(step) = self.current_step_mut() {
+            step.status = PlanStepStatus::Failed;
+            step.result = Some(error);
+        }
+    }
+
+    pub fn replan_from_current(&mut self) -> bool {
+        if self.replan_count >= 3 {
+            return false;
+        }
+        self.replan_count += 1;
+        // Mark remaining steps as pending
+        for step in self.steps.iter_mut().skip(self.current_index) {
+            step.status = PlanStepStatus::Pending;
+            step.result = None;
+        }
+        true
+    }
+}
+
 #[tracing::instrument(skip_all, fields(agent_id = state.agent_id.as_deref().unwrap_or("unknown"), model = state.model, num_messages = state.messages.len(), has_kb = kb_retriever.is_some()))]
 pub async fn plan_step(
     state: &mut AgentState,
