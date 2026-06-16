@@ -55,6 +55,7 @@ impl ToolRegistry {
                 description: description.to_string(),
                 schema,
                 handler,
+                metadata: ToolMetadata::default(),
             },
         );
     }

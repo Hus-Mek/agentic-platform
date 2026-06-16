@@ -393,6 +393,7 @@ pub fn create_delegate_tool(sub_agents: &[SubAgentConfig]) -> ToolImpl {
                 anyhow::bail!("delegate tool is handled by the orchestrator run loop directly")
             })
         }),
+        metadata: crate::tool::ToolMetadata::default(),
     }
 }
 
