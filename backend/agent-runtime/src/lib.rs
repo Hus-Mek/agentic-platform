@@ -1,4 +1,5 @@
 pub mod context;
+pub mod eval;
 pub mod error;
 pub mod evaluate;
 pub mod loop_mod;
