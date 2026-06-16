@@ -1,0 +1,30 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement cost tracking and budget enforcement.
+
+IMPORTANT: All file paths are relative to C:\Users\USER/agentic-platform/backend. Use read_file and write_file tools.
+
+Read these files first:
+- agent-runtime/src/loop_mod.rs
+- api-server/src/routes/mod.rs
+- api-server/src/lib.rs
+- core/src/config.rs
+
+Then:
+
+1. CREATE infra/migrations/0006_workspace_usage.sql with workspace_usage table (id, workspace_id, date, total_tokens, total_cost, request_count, created_at, unique constraint on workspace_id+date)
+
+2. CREATE api-server/src/routes/usage.rs:
+- GET /api/workspaces/:id/usage
+- GET /api/workspaces/:id/usage/summary
+- Use sqlx queries against workspace_usage table
+
+3. MODIFY api-server/src/routes/mod.rs to add usage routes
+4. MODIFY api-server/src/lib.rs to register usage routes
+
+5. MODIFY agent-runtime/src/loop_mod.rs:
+- After LLM calls, record usage (tokens, cost) to workspace_usage
+- Check budget before LLM call
+
+6. Run: cargo check --workspace
+7. Commit: git add -A && git commit -m "feat: cost tracking and budget enforcement"
+
+Working directory: C:\Users\USER/agentic-platform/backend

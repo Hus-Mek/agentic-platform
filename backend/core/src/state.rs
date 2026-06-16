@@ -220,6 +220,15 @@ impl AgentState {
     pub fn increment_iteration(&mut self) {
         self.iteration += 1;
     }
+
+    pub fn add_tokens(&mut self, tokens: i64, cost: f64) {
+        self.total_tokens_used += tokens;
+        self.total_cost += cost;
+    }
+
+    pub fn can_add_tokens(&self, tokens: i64) -> bool {
+        self.total_tokens_used + tokens <= self.token_budget
+    }
 }
 
 // ── Recovery types (error classification + circuit breaker) ──────────────

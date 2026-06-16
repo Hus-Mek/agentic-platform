@@ -106,11 +106,33 @@ async fn run_inner(
                 }
             }
         }
+
         let tokens_before = state.total_tokens_used;
+        let cost_before = state.total_cost;
+
+        if !state.can_add_tokens(0) {
+            tracing::error!("Budget exceeded for workspace {} (tokens: {}, budget: {})",
+                state.workspace_id.as_deref().unwrap_or("unknown"),
+                state.total_tokens_used,
+                state.token_budget
+            );
+            return Ok(());
+        }
+
         let plan_start = std::time::Instant::now();
         let plan_result = plan_step(state, llm_client, memory_client, kb_retriever).await?;
         let plan_duration = plan_start.elapsed().as_millis() as i64;
         let plan_tokens = state.total_tokens_used - tokens_before;
+        let plan_cost = state.total_cost - cost_before;
+
+        record_workspace_usage(
+            db,
+            &state.workspace_id,
+            plan_tokens,
+            plan_cost,
+            1,
+        )
+        .await?;
 
         match plan_result {
             PlanResult::Text(text) => {
@@ -395,6 +417,61 @@ async fn insert_run_step(
     .bind(metadata)
     .execute(db)
     .await?;
+    Ok(())
+}
+
+async fn record_workspace_usage(
+    db: &PgPool,
+    workspace_id_str: &Option<String>,
+    tokens_used: i64,
+    cost: f64,
+    request_count: i32,
+) -> anyhow::Result<()> {
+    let Some(workspace_id) = workspace_id_str.as_ref().and_then(|s| Uuid::parse_str(s).ok()) else {
+        return Ok(());
+    };
+
+    let today = chrono::Utc::now().date_naive();
+
+    let existing = sqlx::query_as::<_, (i64, f64, i32)>(
+        "SELECT total_tokens, total_cost, request_count FROM workspace_usage WHERE workspace_id = $1 AND date = $2"
+    )
+    .bind(workspace_id)
+    .bind(today)
+    .fetch_optional(db)
+    .await?;
+
+    match existing {
+        Some((existing_tokens, existing_cost, existing_requests)) => {
+            let new_tokens = existing_tokens + tokens_used;
+            let new_cost = existing_cost + cost;
+            let new_requests = existing_requests + request_count;
+
+            sqlx::query(
+                "UPDATE workspace_usage SET total_tokens = $1, total_cost = $2, request_count = $3 WHERE workspace_id = $4 AND date = $5"
+            )
+            .bind(new_tokens)
+            .bind(new_cost)
+            .bind(new_requests)
+            .bind(workspace_id)
+            .bind(today)
+            .execute(db)
+            .await?;
+        }
+        None => {
+            sqlx::query(
+                "INSERT INTO workspace_usage (id, workspace_id, date, total_tokens, total_cost, request_count) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)"
+            )
+            .bind(workspace_id)
+            .bind(today)
+            .bind(tokens_used)
+            .bind(cost)
+            .bind(request_count)
+            .execute(db)
+            .await?;
+        }
+    }
+
     Ok(())
 }
 

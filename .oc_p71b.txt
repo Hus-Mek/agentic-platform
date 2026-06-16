@@ -1,0 +1,72 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement the agent evaluation harness (Phase 7.1).
+
+IMPORTANT: All file paths are relative to C:\Users\USER/agentic-platform/backend. Use read_file and write_file tools.
+
+Read:
+- agent-runtime/src/loop_mod.rs (how agents are run)
+- core/src/state.rs
+
+Then:
+
+1. CREATE agent-runtime/src/eval.rs:
+```rust
+#[derive(Debug, Clone)]
+pub struct EvalTask {
+    pub id: String,
+    pub description: String,
+    pub expected_output: String,
+    pub max_iterations: u32,
+}
+
+#[derive(Debug)]
+pub struct EvalResult {
+    pub task_id: String,
+    pub success: bool,
+    pub tokens_used: i64,
+    pub iterations: u32,
+    pub error: Option<String>,
+}
+
+pub struct EvalHarness;
+
+impl EvalHarness {
+    pub fn new() -> Self { Self }
+    
+    pub async fn run_task(&self, task: &EvalTask, state: &mut AgentState) -> EvalResult {
+        let start = std::time::Instant::now();
+        // Run agent with limited iterations
+        let mut iterations = 0;
+        while iterations < task.max_iterations && !state.should_stop() {
+            iterations += 1;
+            // Simplified: just check if expected_output appears in messages
+            if state.messages.iter().any(|m| m.content.contains(&task.expected_output)) {
+                return EvalResult {
+                    task_id: task.id.clone(),
+                    success: true,
+                    tokens_used: state.total_tokens_used,
+                    iterations,
+                    error: None,
+                };
+            }
+            state.increment_iteration();
+        }
+        EvalResult {
+            task_id: task.id.clone(),
+            success: false,
+            tokens_used: state.total_tokens_used,
+            iterations,
+            error: Some("Max iterations reached".into()),
+        }
+    }
+}
+```
+
+2. CREATE agent-runtime/tests/eval_harness.rs:
+- 3 test tasks: basic_tool_use, multi_step, guard_triggered
+- Test that harness correctly measures success/failure
+
+3. Run: cargo check --workspace
+4. Run: cargo test -p agenticos-agent-runtime --test eval_harness
+5. Commit: git add -A && git commit -m "feat: agent evaluation harness"
+
+Working directory: C:\Users\USER/agentic-platform/backend

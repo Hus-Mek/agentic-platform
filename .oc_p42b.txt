@@ -1,0 +1,50 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement memory-enhanced system prompt (Phase 4.2).
+
+IMPORTANT: All file paths are relative to C:\Users\USER/agentic-platform/backend. Use read_file and write_file tools.
+
+Read:
+- agent-runtime/src/plan.rs (how system prompt is built)
+- memory/src/lib.rs (memory client API)
+- core/src/state.rs (AgentState fields)
+
+Then:
+
+1. CREATE agent-runtime/src/prompt_builder.rs:
+```rust
+pub fn build_system_prompt(state: &AgentState, memory_contents: &[String]) -> String {
+    let mut prompt = state.instructions.clone();
+    
+    // Add relevant facts from memory (top 5)
+    if !memory_contents.is_empty() {
+        push_str(&mut prompt, "\n\n## Relevant Context");
+        for (i, fact) in memory_contents.iter().take(5).enumerate() {
+            push_str(&mut prompt, &format!("\n{}. {}", i + 1, fact));
+        }
+    }
+    
+    // Add working memory (current task context)
+    if let Some(last_user) = state.messages.iter().rev().find(|m| m.role == "user") {
+        push_str(&mut prompt, &format!("\n\n## Current Task\n{}", last_user.content));
+    }
+    
+    // Ensure under 4K tokens (rough: chars / 4)
+    let max_chars = 16000;
+    if prompt.len() > max_chars {
+        prompt.truncate(max_chars);
+        prompt.push_str("\n\n[Context truncated due to length]");
+    }
+    
+    prompt
+}
+```
+
+2. MODIFY agent-runtime/src/plan.rs:
+- Import and use `build_system_prompt` instead of static instructions
+- Pass memory_contents from state
+
+3. CREATE agent-runtime/tests/prompt_builder_tests.rs with 3 tests
+
+4. Run: cargo check --workspace
+5. Commit: git add -A && git commit -m "feat: memory-enhanced dynamic system prompt"
+
+Working directory: C:\Users\USER/agentic-platform/backend

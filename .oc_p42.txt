@@ -1,0 +1,24 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement memory-enhanced system prompt (Phase 4.2).
+
+Read:
+- agent-runtime/src/plan.rs (how system prompt is built)
+- memory/src/lib.rs (memory client API)
+- core/src/state.rs (AgentState fields)
+
+Then:
+
+1. CREATE agent-runtime/src/prompt_builder.rs:
+- `build_system_prompt(state: &AgentState, memory_client: &MemoryClient) -> String`
+- Builds dynamic prompt from: base instructions, relevant facts (top 5), relevant procedures (top 3), working memory (current task)
+- Prompt budget: stays under 4K tokens
+- Priority: user profile > facts > procedures > knowledge
+
+2. MODIFY agent-runtime/src/plan.rs:
+- Use prompt_builder instead of static system prompt
+
+3. CREATE agent-runtime/tests/prompt_builder_tests.rs with 3 tests
+
+4. Verify: cargo check --workspace
+5. Commit: git add -A && git commit -m "feat: memory-enhanced dynamic system prompt"
+
+Working directory: C:\Users\USER/agentic-platform/backend

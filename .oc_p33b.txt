@@ -1,0 +1,49 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement multi-step planning with replanning.
+
+IMPORTANT: All file paths are relative to C:\Users\USER/agentic-platform/backend. Use `read_file` and `write_file` tools, not bash cd/ls commands.
+
+Read these files first:
+- agent-runtime/src/plan.rs
+- agent-runtime/src/orchestrator.rs
+- core/src/state.rs
+
+Then:
+
+1. MODIFY agent-runtime/src/plan.rs - add after existing code:
+```rust
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlanStepStatus { Pending, InProgress, Completed, Failed, Replanned }
+
+#[derive(Debug, Clone)]
+pub struct PlanStep {
+    pub id: String,
+    pub description: String,
+    pub status: PlanStepStatus,
+    pub tool_call: Option<agenticos_core::state::ToolCall>,
+    pub result: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlanExecution {
+    pub steps: Vec<PlanStep>,
+    pub current_index: usize,
+    pub replan_count: u32,
+}
+```
+
+2. CREATE agent-runtime/src/plan_executor.rs:
+- `execute_plan(execution: &mut PlanExecution, state: &mut AgentState, tool_registry: &ToolRegistry) -> anyhow::Result<()>`
+- Loop through steps, execute each via tool_registry
+- On failure: increment replan_count, mark step Failed, create new step from failed position
+- Max 3 replans
+- Emit UDM events
+
+3. MODIFY agent-runtime/src/tool.rs - register `execute_plan` tool
+
+4. CREATE agent-runtime/tests/plan_executor_tests.rs with 3 tests
+
+5. Run: cargo check --workspace
+6. Run: cargo test -p agenticos-agent-runtime --lib
+7. Commit: git add -A && git commit -m "feat: multi-step planning with replanning"
+
+Working directory: C:\Users\USER/agentic-platform/backend

@@ -1,0 +1,25 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, implement the agent evaluation harness (Phase 7.1).
+
+Read:
+- agent-runtime/src/loop_mod.rs (how agents are run)
+- core/src/state.rs
+
+Then:
+
+1. CREATE agent-runtime/src/eval.rs:
+- `EvalTask` struct: id, description, expected_output, tools_available, max_iterations
+- `EvalResult` struct: task_id, success, tokens_used, latency_ms, tool_accuracy
+- `EvalHarness` struct with `run_task()` and `run_suite()` methods
+
+2. CREATE agent-runtime/tests/eval_harness.rs:
+- Test harness with mock LLM provider
+- Task suites: basic_tools, file_ops, multi_step
+- Metrics: success rate, token efficiency, latency, tool accuracy
+
+3. Register eval routes in api-server if time permits
+
+4. Verify: cargo check --workspace
+5. Verify: cargo test -p agenticos-agent-runtime --test eval_harness
+6. Commit: git add -A && git commit -m "feat: agent evaluation harness"
+
+Working directory: C:\Users\USER/agentic-platform/backend

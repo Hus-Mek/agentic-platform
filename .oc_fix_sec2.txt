@@ -1,0 +1,27 @@
+In the workspace at C:\Users\USER/agentic-platform/backend, fix the 14 failing tests in agent-runtime/tests/security_tests.rs.
+
+STEP 1: Run `cargo test -p agenticos-agent-runtime --test security_tests 2>&1 | tail -30` to see the exact assertion failures.
+
+STEP 2: For each failing test, read the test and the corresponding policy in guards/src/inspector.rs. The policies are partial stubs from Phase 7. Fix the policy detection logic to match what the tests expect.
+
+Key patterns the tests check:
+- PII: email -> "email" in reason, "[EMAIL REDACTED]" in edited_content
+- PII: phone -> "phone" in reason, "[PHONE REDACTED]" in edited_content  
+- PII: SSN -> "ssn" in reason, "[SSN REDACTED]" in edited_content
+- PII: credit card -> "credit_card" in reason, "[CC REDACTED]" in edited_content
+- PII: API key -> "api_key" in reason, "[API KEY REDACTED]" in edited_content
+- PII: IP -> "ipv4" in reason, "[IP REDACTED]" in edited_content
+- Goal hijacking: "goal hijacking" in reason, "[REDACTED]" in edited_content
+- Tool misuse: "suspicious arguments" in reason
+- Privilege escalation: "path traversal" in reason
+- Memory poisoning: "memory poisoning" in reason, "[REDACTED]" in edited_content
+- Rogue agent: "self-modification" in reason
+- Human trust manipulation: specific patterns
+- Insecure inter-agent: specific patterns
+- Cascading failure: consecutive_errors >= 3
+
+STEP 3: Run `cargo test -p agenticos-agent-runtime --test security_tests` to verify all pass.
+
+STEP 4: Commit with message "fix: align guard policies with security test expectations"
+
+Working directory: C:\Users\USER/agentic-platform/backend

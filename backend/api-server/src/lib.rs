@@ -119,6 +119,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/approvals", get(routes::approval::list_approvals))
         .route("/api/approvals/{id}/approve", post(routes::approval::approve_request))
         .route("/api/approvals/{id}/reject", post(routes::approval::reject_request))
+        .route("/api/workspaces/{id}/usage", get(routes::usage::get_usage))
+        .route("/api/workspaces/{id}/usage/summary", get(routes::usage::get_usage_summary))
         .layer(from_fn_with_state(
             state.clone(),
             middleware::auth::auth_middleware,

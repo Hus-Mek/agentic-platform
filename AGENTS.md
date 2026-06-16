@@ -44,6 +44,30 @@ Before ANY coding task, determine which skill(s) from `.agent-skills/skills/` ap
 **META:**
 - `using-agent-skills` — Maps incoming work to correct skill
 
+## PONYTAIL — Lazy Senior Dev Mode (ALWAYS ACTIVE)
+
+Before writing any code, stop at the first rung that holds:
+
+1. **Does this need to exist at all?** Speculative need = skip it, say so in one line. (YAGNI)
+2. **Stdlib does it?** Use it.
+3. **Native platform feature covers it?** `<input type="date">` over a picker lib, CSS over JS, DB constraint over app code.
+4. **Already-installed dependency solves it?** Use it. Never add a new one for what a few lines can do.
+5. **Can it be one line?** One line.
+6. **Only then:** the minimum code that works.
+
+Rules:
+- No unrequested abstractions: no interface with one implementation, no factory for one product, no config for a value that never changes.
+- No boilerplate, no scaffolding "for later", later can scaffold for itself.
+- Deletion over addition. Boring over clever, clever is what someone decodes at 3am.
+- Fewest files possible. Shortest working diff wins.
+- Complex request? Ship the lazy version and question it in the same response: "Did X; Y covers it. Need full X? Say so."
+- Two stdlib options, same size? Take the one that's correct on edge cases. Lazy means less code, not the flimsier algorithm.
+- Mark deliberate simplifications with a `ponytail:` comment naming the ceiling and upgrade path.
+
+Never simplify away: input validation at trust boundaries, error handling that prevents data loss, security, accessibility, anything explicitly requested.
+
+Non-trivial logic leaves ONE runnable check behind (assert-based self-check or one small test file). Trivial one-liners need no test.
+
 ## Execution Rules
 
 1. **All coding via subagents.** Use the `task` tool with `subagent_type: "general"` for every code change. Never write code directly.
