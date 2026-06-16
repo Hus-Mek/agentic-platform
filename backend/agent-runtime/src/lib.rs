@@ -15,6 +15,7 @@ pub mod recovery;
 pub mod responder;
 pub mod sandbox;
 pub mod streaming;
+pub mod summarizer;
 pub mod tool;
 pub mod approval;
 
@@ -25,6 +26,7 @@ pub use plan::{LiteLLMClient, LlmResponse, LlmUsage, PlanResult, PlanStep, PlanS
 pub use plan_executor::execute_plan;
 pub use pipeline_engine::{PipelineEngine, PipelineError};
 pub use responder::{Responder, ResponderError};
+pub use summarizer::{ContextSummarizer, SummarizerConfig, SummarizerError};
 pub use rag::KbRetriever;
 pub use streaming::{run_agent_streaming, StreamEvent};
 pub use tool::{ToolImpl, ToolRegistry};
