@@ -46,12 +46,13 @@ struct FallbackEntry {
 }
 
 pub struct MemoryClient {
-    qdrant: Qdrant,
+    qdrant: Option<Qdrant>,
     collection_name: String,
     http_client: reqwest::Client,
     embed_base_url: String,
     fallback_store: Mutex<HashMap<String, FallbackEntry>>,
     use_fallback: bool,
+    working_memory: Mutex<HashMap<String, String>>,
 }
 
 fn qdrant_value_from_str(s: &str) -> QdrantValue {
@@ -61,26 +62,40 @@ fn qdrant_value_from_str(s: &str) -> QdrantValue {
 }
 
 impl MemoryClient {
-    pub async fn new(qdrant_url: &str, collection_name: &str) -> Self {
+    pub async fn new(qdrant_url: &str, collection_name: &str, embed_base_url: &str) -> Self {
         let qdrant = match Qdrant::from_url(qdrant_url).build() {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!("Failed to connect to Qdrant at {qdrant_url}: {e}. Using fallback in-memory store.");
                 return Self {
-                    qdrant: unsafe { std::mem::zeroed() },
+                    qdrant: None,
                     collection_name: collection_name.to_string(),
                     http_client: reqwest::Client::new(),
-                    embed_base_url: "http://localhost:4000".into(),
+                    embed_base_url: embed_base_url.to_string(),
                     fallback_store: Mutex::new(HashMap::new()),
                     use_fallback: true,
+                    working_memory: Mutex::new(HashMap::new()),
                 };
             }
         };
 
-        let collections = qdrant
-            .list_collections()
-            .await
-            .unwrap_or_else(|_| panic!("Failed to list Qdrant collections"));
+        let collections = match qdrant.list_collections().await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to list Qdrant collections: {e}. Using fallback in-memory store."
+                );
+                return Self {
+                    qdrant: None,
+                    collection_name: collection_name.to_string(),
+                    http_client: reqwest::Client::new(),
+                    embed_base_url: embed_base_url.to_string(),
+                    fallback_store: Mutex::new(HashMap::new()),
+                    use_fallback: true,
+                    working_memory: Mutex::new(HashMap::new()),
+                };
+            }
+        };
 
         let exists = collections
             .collections
@@ -97,29 +112,31 @@ impl MemoryClient {
             {
                 tracing::warn!("Failed to create Qdrant collection: {e}. Using fallback.");
                 return Self {
-                    qdrant: unsafe { std::mem::zeroed() },
+                    qdrant: None,
                     collection_name: collection_name.to_string(),
                     http_client: reqwest::Client::new(),
-                    embed_base_url: "http://localhost:4000".into(),
+                    embed_base_url: embed_base_url.to_string(),
                     fallback_store: Mutex::new(HashMap::new()),
                     use_fallback: true,
+                    working_memory: Mutex::new(HashMap::new()),
                 };
             }
             tracing::info!(collection = %collection_name, "Created Qdrant collection");
         }
 
         Self {
-            qdrant,
+            qdrant: Some(qdrant),
             collection_name: collection_name.to_string(),
             http_client: reqwest::Client::new(),
-            embed_base_url: "http://localhost:4000".into(),
+            embed_base_url: embed_base_url.to_string(),
             fallback_store: Mutex::new(HashMap::new()),
             use_fallback: false,
+            working_memory: Mutex::new(HashMap::new()),
         }
     }
 
     pub async fn from_config(config: &agenticos_core::config::AppConfig) -> Self {
-        Self::new(&config.qdrant_url, "memories").await
+        Self::new(&config.qdrant_url, "memories", &config.embedding_base_url).await
     }
 
     pub async fn search(
@@ -164,7 +181,7 @@ impl MemoryClient {
         };
 
         let search_result = self
-            .qdrant
+            .qdrant.as_ref().unwrap()
             .search_points(
                 SearchPointsBuilder::new(
                     self.collection_name.as_str(),
@@ -330,7 +347,7 @@ impl MemoryClient {
 
         let point = PointStruct::new(point_id, embedding, payload);
 
-        self.qdrant
+        self.qdrant.as_ref().unwrap()
             .upsert_points(
                 UpsertPointsBuilder::new(self.collection_name.as_str(), vec![point])
                     .wait(true),
@@ -371,7 +388,7 @@ impl MemoryClient {
             point_id_options: Some(point_id::PointIdOptions::Uuid(memory_id.to_string())),
         };
 
-        self.qdrant
+        self.qdrant.as_ref().unwrap()
             .delete_points(
                 DeletePointsBuilder::new(self.collection_name.as_str())
                     .points(vec![point_id])
@@ -394,7 +411,7 @@ impl MemoryClient {
             Condition::matches("agent_id", agent_id.to_string()),
         ]);
 
-        self.qdrant
+        self.qdrant.as_ref().unwrap()
             .delete_points(
                 DeletePointsBuilder::new(self.collection_name.as_str())
                     .points(filter)
@@ -473,6 +490,95 @@ impl MemoryClient {
                 created_at: e.created_at,
             })
             .collect()
+    }
+
+    /// Creates a MemoryClient in fallback (in-memory) mode.
+    /// Does not attempt to connect to Qdrant.
+    pub fn new_fallback() -> Self {
+        Self {
+            qdrant: None,
+            collection_name: "test".to_string(),
+            http_client: reqwest::Client::new(),
+            embed_base_url: String::new(),
+            fallback_store: Mutex::new(HashMap::new()),
+            use_fallback: true,
+            working_memory: Mutex::new(HashMap::new()),
+        }
+    }
+
+    // ── Working Memory ────────────────────────────────────────────────
+
+    pub fn set_context(&self, key: &str, value: &str) {
+        let mut wm = self.working_memory.lock().unwrap();
+        wm.insert(key.to_string(), value.to_string());
+    }
+
+    pub fn get_context(&self, key: &str) -> Option<String> {
+        let wm = self.working_memory.lock().unwrap();
+        wm.get(key).cloned()
+    }
+
+    pub fn clear_context(&self) {
+        let mut wm = self.working_memory.lock().unwrap();
+        wm.clear();
+    }
+
+    pub fn get_all_context(&self) -> HashMap<String, String> {
+        let wm = self.working_memory.lock().unwrap();
+        wm.clone()
+    }
+
+    // ── Semantic Memory ───────────────────────────────────────────────
+
+    pub async fn store_semantic(
+        &self,
+        content: &str,
+        user_id: Option<&str>,
+        agent_id: Option<&str>,
+    ) -> Result<String> {
+        self.store(content, "semantic", user_id, agent_id, None).await
+    }
+
+    pub async fn retrieve_semantic(
+        &self,
+        query: &str,
+        user_id: Option<&str>,
+        agent_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        let filter = MemoryFilter {
+            memory_type: Some("semantic".into()),
+            user_id: user_id.map(String::from),
+            agent_id: agent_id.map(String::from),
+            run_id: None,
+        };
+        let entries = self.search(query, filter, limit as u64).await?;
+        Ok(entries.into_iter().map(|e| e.content).collect())
+    }
+
+    // ── Procedural Memory ─────────────────────────────────────────────
+
+    pub async fn store_procedural(
+        &self,
+        content: &str,
+        user_id: Option<&str>,
+    ) -> Result<String> {
+        self.store(content, "procedural", user_id, None, None).await
+    }
+
+    pub async fn retrieve_procedural(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        let filter = MemoryFilter {
+            memory_type: Some("procedural".into()),
+            user_id: None,
+            agent_id: None,
+            run_id: None,
+        };
+        let entries = self.search(query, filter, limit as u64).await?;
+        Ok(entries.into_iter().map(|e| e.content).collect())
     }
 }
 

@@ -1,0 +1,19 @@
+Fix the frontend API endpoint paths in frontend/hooks/useAgentChat.ts.
+
+The backend API has these endpoints:
+- POST /api/agents/{id}/run (non-streaming)
+- POST /api/agents/{id}/run-stream (SSE streaming)
+
+The current useAgentChat.ts calls wrong endpoints:
+- ${baseUrl}/api/agents/${agentId}/chat (WRONG - doesnt exist)
+- ${baseUrl}/api/chat (WRONG - doesnt exist)
+
+Fix the endpoint construction to use the correct paths.
+
+Also fix the request body: should be { input: content } not { message: content, stream: true }
+
+For the streaming response, the backend sends axum SSE format where each event line starts with "data: " followed by JSON. The StreamEvent types from backend are: Token(String), ToolCall{name, args}, ToolResult{name, result}, Done, Error(String).
+
+Update the SSE parsing to handle these event types properly. When type is "token", append content to the assistant message. When type is "tool_call", add tool call badge. When type is "done", end streaming. When type is "error", set error state.
+
+Work fast. Make all edits in one pass.

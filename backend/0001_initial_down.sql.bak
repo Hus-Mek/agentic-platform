@@ -1,0 +1,3 @@
+-- Down migration disabled for PG16 compatibility
+-- Use: DROP DATABASE IF EXISTS agentic_platform WITH (FORCE); to reset
+SELECT 1;

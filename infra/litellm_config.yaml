@@ -80,42 +80,6 @@ model_list:
       cost_per_token_input: 0.0000008
       cost_per_token_output: 0.000004
 
-  - model_name: gpt-4o
-    litellm_params:
-      model: openai/gpt-4o-2024-08-06
-      api_key: ${OPENAI_API_KEY}
-      rpm: 500
-      tpm: 80000
-      max_tokens: 16384
-      temperature: 0.7
-    model_info:
-      mode: chat
-      supports_function_calling: true
-      supports_vision: true
-      supports_tool_actions: true
-      fallbacks:
-        - claude-sonnet-4
-      cost_per_token_input: 0.0000025
-      cost_per_token_output: 0.00001
-
-  - model_name: gpt-4o-mini
-    litellm_params:
-      model: openai/gpt-4o-mini-2024-07-18
-      api_key: ${OPENAI_API_KEY}
-      rpm: 1000
-      tpm: 200000
-      max_tokens: 16384
-      temperature: 0.7
-    model_info:
-      mode: chat
-      supports_function_calling: true
-      supports_vision: true
-      supports_tool_actions: true
-      fallbacks:
-        - claude-haiku-3-5
-      cost_per_token_input: 0.00000015
-      cost_per_token_output: 0.0000006
-
 litellm_settings:
   drop_params: true
   set_verbose: false

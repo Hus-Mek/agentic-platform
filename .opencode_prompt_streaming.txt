@@ -1,0 +1,14 @@
+Fix streaming error handling in backend/api-server/src/routes/agents.rs.
+
+In the run_agent_stream function (around line 568-708), when the spawned tokio task encounters an error:
+1. It sends StreamEvent::Error to the channel (this is good)
+2. BUT it never updates the DB run status to failed (this is bad)
+
+In the Err branch of the spawned task (around line 693-698), add a DB update:
+- Execute: UPDATE runs SET status = 'failed', error = $1 WHERE id = $2
+- Use the existing db variable and run_id_str variable
+- Use .execute(&db).await and ignore errors with let _ =
+
+Also: the run is inserted with status 'running' at the start of the function. If this INSERT fails, the function returns early. This is fine, but add a map_err to convert the error properly.
+
+Work fast. Make all edits in one pass.

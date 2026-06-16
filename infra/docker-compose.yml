@@ -1,5 +1,37 @@
 version: "3.9"
 
+# ============================================================
+# AgenticOS Platform — Docker Compose
+# ============================================================
+# This stack runs the application's core services with a
+# standalone PostgreSQL instance (port 5432).
+#
+# SUPABASE NOTE:
+# The project also has a supabase/ config for local Supabase
+# development (Studio, PostgREST, auth.uid() for RLS).
+# Supabase runs its OWN PostgreSQL (port 54322).
+#
+# Two options for local development:
+#
+#   Option A (default): Use this docker-compose PostgreSQL
+#     Run: docker-compose up
+#     DB: localhost:5432 (managed by compose)
+#     Supabase: start separately with `supabase start`
+#     (Supabase Studio available at localhost:54323)
+#
+#   Option B: Use Supabase-managed PostgreSQL
+#     1. Comment out the `postgres` service below
+#     2. Change DATABASE_URL to point to Supabase DB:
+#        postgres://postgres:postgres@localhost:54322/agenticos
+#     3. Run: docker-compose up (without postgres service)
+#        Then: supabase start (for Studio + auth schema)
+#
+# To DISABLE the standalone PostgreSQL when using Supabase:
+#   docker-compose stop postgres
+#   docker-compose rm -f postgres
+#   (or comment out the postgres service block below)
+# ============================================================
+
 x-postgres-env: &postgres-env
   POSTGRES_USER: ${POSTGRES_USER:-postgres}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -38,20 +70,6 @@ services:
       QDRANT__SERVICE__GRPC_PORT: 6334
     restart: unless-stopped
 
-  litellm:
-    image: ghcr.io/berriai/litellm:main-v1.60.0
-    container_name: agenticos-litellm
-    ports:
-      - "4000:4000"
-    volumes:
-      - ./litellm_config.yaml:/app/config.yaml
-    environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      LITELLM_CONFIG_FILE: /app/config.yaml
-    command: ["--port", "4000", "--config", "/app/config.yaml", "--detailed_logging"]
-    restart: unless-stopped
-
   langfuse:
     image: langfuse/langfuse:3.36.0
     container_name: agenticos-langfuse
@@ -80,7 +98,8 @@ services:
     environment:
       <<: *postgres-url
       QDRANT_URL: http://qdrant:6333
-      LITELLM_URL: http://litellm:4000
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_API_KEY: ${LLM_API_KEY}
       LANGFUSE_URL: http://langfuse:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-00000000-0000-0000-0000-000000000000}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-00000000-0000-0000-0000-000000000000}
@@ -90,8 +109,6 @@ services:
       postgres:
         condition: service_healthy
       qdrant:
-        condition: service_started
-      litellm:
         condition: service_started
     restart: unless-stopped
 

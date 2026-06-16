@@ -1,0 +1,10 @@
+Fix two things:
+
+1. Fix the duplicate LiteLLM model entries in infra/litellm_config.yaml.
+The file currently defines gpt-4o and gpt-4o-mini TWICE (lines 19-34 and 83-117). Remove the duplicate entries (lines 83-117). Keep only the first definition of each model.
+
+2. Fix the health check in backend/api-server/src/routes/mod.rs:
+The uptime_seconds field currently does Instant::now().elapsed().as_secs() which is always ~0 because Instant::now() is called at request time.
+Instead, use a static OnceLock<Instant> (from std::sync::OnceLock) to capture server start time at first request, then compute elapsed from that.
+
+Work fast. Make all edits in one pass per file.

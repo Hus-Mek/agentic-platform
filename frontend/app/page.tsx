@@ -12,6 +12,7 @@ import {
   Zap,
   Sparkles,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 
 interface Stat {
@@ -30,75 +31,161 @@ interface RecentRun {
   timestamp: string;
 }
 
-export default function DashboardPage() {
-  const [stats] = useState<Stat[]>([
-    {
-      label: "Active Agents",
-      value: "12",
-      icon: <Bot size={20} />,
-      change: "+3 this week",
-      positive: true,
-    },
-    {
-      label: "Total Runs",
-      value: "1,847",
-      icon: <Activity size={20} />,
-      change: "+12.5% vs last week",
-      positive: true,
-    },
-    {
-      label: "Success Rate",
-      value: "94.2%",
-      icon: <TrendingUp size={20} />,
-      change: "+2.1%",
-      positive: true,
-    },
-    {
-      label: "Avg Response Time",
-      value: "1.2s",
-      icon: <Clock size={20} />,
-      change: "-0.3s",
-      positive: true,
-    },
-  ]);
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const WORKSPACE_ID = "00000000-0000-0000-0000-000000000001";
 
-  const [recentRuns] = useState<RecentRun[]>([
-    {
-      id: "run_abc123",
-      agentName: "Customer Support Bot",
-      status: "completed",
-      duration: "2.4s",
-      timestamp: "2 min ago",
-    },
-    {
-      id: "run_def456",
-      agentName: "Code Review Assistant",
-      status: "completed",
-      duration: "8.1s",
-      timestamp: "15 min ago",
-    },
-    {
-      id: "run_ghi789",
-      agentName: "Data Analyzer",
-      status: "failed",
-      duration: "12.3s",
-      timestamp: "1 hr ago",
-    },
-    {
-      id: "run_jkl012",
-      agentName: "Email Composer",
-      status: "running",
-      duration: "--",
-      timestamp: "Just now",
-    },
-    {
-      id: "run_mno345",
-      agentName: "Research Agent",
-      status: "completed",
-      duration: "5.7s",
-      timestamp: "2 hrs ago",
-    },
-  ]);
+async function fetchJson(url: string): Promise<any> {
+  const res = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  return res.json();
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  if (hours < 48) return "1 day ago";
+  return `${Math.floor(hours / 24)} days ago`;
+}
+
+function formatDuration(ms: number | null): string {
+  if (ms === null) return "--";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+export default function DashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<Stat[]>([]);
+  const [recentRuns, setRecentRuns] = useState<RecentRun[]>([]);
+
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const [agents, runs] = await Promise.all([
+          fetchJson(`${API_URL}/api/agents?workspace_id=${WORKSPACE_ID}`),
+          fetchJson(`${API_URL}/api/runs?workspace_id=${WORKSPACE_ID}`),
+        ]);
+
+        const agentMap: Record<string, string> = {};
+        for (const a of agents) {
+          agentMap[a.id] = a.name;
+        }
+
+        const totalAgents = agents.length;
+        const totalRuns = runs.length;
+        const completed = runs.filter((r: any) => r.status === "completed").length;
+        const failed = runs.filter((r: any) => r.status === "failed" || r.status === "cancelled").length;
+        const successRate = totalRuns > 0 ? (completed / totalRuns) * 100 : 0;
+        const durations = runs
+          .map((r: any) => r.duration_ms)
+          .filter((d: number | null): d is number => d !== null);
+        const avgDuration =
+          durations.length > 0
+            ? durations.reduce((a: number, b: number) => a + b, 0) / durations.length
+            : 0;
+
+        setStats([
+          {
+            label: "Active Agents",
+            value: String(totalAgents),
+            icon: <Bot size={20} />,
+            change: `${totalAgents} deployed`,
+            positive: totalAgents > 0,
+          },
+          {
+            label: "Total Runs",
+            value: String(totalRuns),
+            icon: <Activity size={20} />,
+            change: `${completed} completed`,
+            positive: totalRuns > 0,
+          },
+          {
+            label: "Success Rate",
+            value: totalRuns > 0 ? `${successRate.toFixed(1)}%` : "--",
+            icon: <TrendingUp size={20} />,
+            change: `${completed} ok, ${failed} fail`,
+            positive: successRate >= 50,
+          },
+          {
+            label: "Avg Response Time",
+            value: durations.length > 0 ? formatDuration(Math.round(avgDuration)) : "--",
+            icon: <Clock size={20} />,
+            change: `${durations.length} measured`,
+            positive: true,
+          },
+        ]);
+
+        const recent = runs
+          .slice()
+          .sort(
+            (a: any, b: any) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+          .slice(0, 5)
+          .map((r: any) => ({
+            id: r.id,
+            agentName: agentMap[r.agent_id] || r.agent_id.slice(0, 8),
+            status: (
+              r.status === "completed"
+                ? "completed"
+                : r.status === "failed" || r.status === "cancelled"
+                  ? "failed"
+                  : "running"
+            ) as RecentRun["status"],
+            duration: formatDuration(r.duration_ms),
+            timestamp: relativeTime(r.created_at),
+          }));
+
+        setRecentRuns(recent);
+      } catch (err: any) {
+        setError(err.message || "Failed to load dashboard data");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadDashboard();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3 text-surface-400">
+          <Loader2 size={32} className="animate-spin text-brand-400" />
+          <p className="text-sm">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="card p-8 max-w-md text-center">
+          <div className="text-red-400 text-lg font-semibold mb-2">
+            Failed to load
+          </div>
+          <p className="text-surface-400 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

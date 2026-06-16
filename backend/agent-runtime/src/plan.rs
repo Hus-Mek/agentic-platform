@@ -3,6 +3,8 @@ use agenticos_core::state::{AgentState, Message, ToolCall as CoreToolCall, ToolD
 use agenticos_core::udm::{AgentEvent, EventResult, EventType, Observable};
 use chrono::Utc;
 
+use crate::rag::KbRetriever;
+
 #[derive(Debug)]
 pub enum PlanResult {
     Text(String),
@@ -11,10 +13,12 @@ pub enum PlanResult {
     Retry,
 }
 
+#[tracing::instrument(skip_all, fields(agent_id = state.agent_id.as_deref().unwrap_or("unknown"), model = state.model, num_messages = state.messages.len(), has_kb = kb_retriever.is_some()))]
 pub async fn plan_step(
     state: &mut AgentState,
     llm_client: &LiteLLMClient,
-    memory_client: &agenticos_memory::MemoryClient,
+    _memory_client: &agenticos_memory::MemoryClient,
+    kb_retriever: Option<&KbRetriever>,
 ) -> anyhow::Result<PlanResult> {
     state.current_node = Some("plan".into());
 
@@ -34,6 +38,30 @@ pub async fn plan_step(
             "Circuit breaker triggered"
         );
         return Ok(PlanResult::Stop);
+    }
+
+    if let Some(kb) = kb_retriever {
+        if state.memory_config.enabled {
+            let last_user_msg = state
+                .messages
+                .iter()
+                .rev()
+                .find(|m| m.role == "user")
+                .map(|m| m.content.clone());
+            if let Some(query) = last_user_msg {
+                if let Some(ws_id) = &state.workspace_id {
+                    match kb.retrieve(&query, ws_id, 5).await {
+                        Ok(contents) => {
+                            state.kb_contents = contents;
+                        }
+                        Err(e) => {
+                            tracing::warn!("KB retrieval failed: {e}");
+                            state.kb_contents = Vec::new();
+                        }
+                    }
+                }
+            }
+        }
     }
 
     let system_prompt = build_system_prompt(state).await;
@@ -69,9 +97,7 @@ pub async fn plan_step(
     state.total_cost += response.usage.cost;
     state.consecutive_errors = 0;
 
-    if let Some(usage) = Option::<(&LlmUsage, &str)>::None {
-        // unused
-    }
+    let _usage = &response.usage;
 
     if let Some(content) = &response.content {
         if !content.is_empty() {
@@ -153,6 +179,11 @@ async fn build_system_prompt(state: &AgentState) -> String {
     if state.memory_config.enabled && !state.memory_contents.is_empty() {
         let memories = state.memory_contents.join("\n- ");
         parts.push(format!("\n\n[Relevant memories]\n- {}", memories));
+    }
+
+    if state.memory_config.enabled && !state.kb_contents.is_empty() {
+        let knowledge = state.kb_contents.join("\n");
+        parts.push(format!("\n\n[Relevant knowledge]\n{}", knowledge));
     }
 
     parts.join("\n")

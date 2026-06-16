@@ -85,6 +85,10 @@ export default function AgentForm({
     initialData?.memory_config?.enabled ?? false
   );
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
   const [topicInput, setTopicInput] = useState("");
   const [blockedTopicInput, setBlockedTopicInput] = useState("");
 
@@ -148,13 +152,55 @@ export default function AgentForm({
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
-      ...data,
-      guard_config: { ...data.guard_config, enabled: showGuards },
-      memory_config: { ...data.memory_config, enabled: showMemory },
-    });
+    setError(null);
+    setIsSubmitting(true);
+
+    const guard = { ...data.guard_config, enabled: showGuards };
+    const mem = { ...data.memory_config, enabled: showMemory };
+
+    const payload = {
+      name: data.name,
+      description: data.description,
+      instructions: data.instructions,
+      model: data.model,
+      tools: data.tools.map((name) => ({
+        type: "function",
+        function: { name, description: name, parameters: { type: "object", properties: {} } },
+      })),
+      guard_config: {
+        inspector_enabled: guard.toxicity_filter,
+        bodyguard_enabled: guard.enabled,
+        pii_detection: guard.pii_redaction,
+        max_tokens_per_response: guard.max_tokens_per_response,
+      },
+      memory_config: {
+        enabled: mem.enabled,
+        memory_type: mem.type,
+        max_memories: mem.max_history,
+      },
+    };
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    try {
+      const res = await fetch(`${baseUrl}/api/agents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `Request failed with status ${res.status}`);
+      }
+      setSuccess(true);
+      setTimeout(() => onCancel(), 1000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -515,15 +561,30 @@ export default function AgentForm({
         )}
       </section>
 
+      {error && (
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
+          Agent created successfully!
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex items-center justify-end gap-3">
-        <button type="button" onClick={onCancel} className="btn-secondary">
+        <button type="button" onClick={onCancel} className="btn-secondary" disabled={isSubmitting}>
           <X size={16} />
           Cancel
         </button>
-        <button type="submit" className="btn-primary">
-          <Save size={16} />
-          Save Agent
+        <button type="submit" className="btn-primary" disabled={isSubmitting}>
+          {isSubmitting ? (
+            <span className="animate-spin inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+          ) : (
+            <Save size={16} />
+          )}
+          {isSubmitting ? "Saving..." : "Save Agent"}
         </button>
       </div>
     </form>

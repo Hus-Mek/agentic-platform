@@ -12,8 +12,13 @@ pub struct GuardEngine {
 
 impl GuardEngine {
     pub fn new() -> Self {
+        let mut inspector = Inspector::new();
+        inspector.add_policy(crate::inspector::PiiDetection::new());
+        inspector.add_policy(crate::inspector::TokenBudgetPolicy);
+        inspector.add_policy(crate::inspector::ContentModeration::new());
+        inspector.add_policy(crate::inspector::IterationLimit);
         Self {
-            inspector: Inspector::new(),
+            inspector,
             bodyguard: Bodyguard::new(),
         }
     }

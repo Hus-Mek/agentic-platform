@@ -17,12 +17,11 @@ interface Message {
 }
 
 interface StreamToken {
-  type: "token" | "tool_call" | "tool_result" | "run_start" | "run_complete" | "error";
+  type: "token" | "tool_call" | "tool_result" | "done" | "error";
   content?: string;
-  toolName?: string;
-  toolCallId?: string;
-  runId?: string;
-  error?: string;
+  name?: string;
+  args?: string;
+  result?: string;
 }
 
 interface ChatState {
@@ -37,7 +36,6 @@ type ChatAction =
   | { type: "ADD_USER_MESSAGE"; content: string }
   | { type: "STREAM_TOKEN"; token: string }
   | { type: "ADD_TOOL_CALL"; name: string }
-  | { type: "SET_RUN_ID"; runId: string }
   | { type: "STREAM_END" }
   | { type: "SET_ERROR"; error: string }
   | { type: "RESET" };
@@ -91,9 +89,6 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       }
       return { ...state, currentToolCalls: toolCalls, messages: msgs };
     }
-
-    case "SET_RUN_ID":
-      return { ...state, runId: action.runId };
 
     case "STREAM_END":
       return { ...state, isStreaming: false, currentToolCalls: [] };
@@ -169,13 +164,11 @@ export function useAgentChat(agentId?: string): UseAgentChatReturn {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      dispatch({ type: "SET_RUN_ID", runId: "" });
-
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const endpoint = agentId
-          ? `${baseUrl}/api/agents/${agentId}/chat`
-          : `${baseUrl}/api/chat`;
+          ? `${baseUrl}/api/agents/${agentId}/run-stream`
+          : `${baseUrl}/api/agents/default/run-stream`;
 
         const response = await fetch(endpoint, {
           method: "POST",
@@ -184,8 +177,7 @@ export function useAgentChat(agentId?: string): UseAgentChatReturn {
             Accept: "text/event-stream",
           },
           body: JSON.stringify({
-            message: content,
-            stream: true,
+            input: content,
           }),
           signal: controller.signal,
         });
@@ -208,8 +200,6 @@ export function useAgentChat(agentId?: string): UseAgentChatReturn {
         const decoder = new TextDecoder();
         let buffer = "";
 
-        dispatch({ type: "SET_RUN_ID", runId: "" });
-
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -229,17 +219,6 @@ export function useAgentChat(agentId?: string): UseAgentChatReturn {
               const data: StreamToken = JSON.parse(jsonStr);
 
               switch (data.type) {
-                case "run_start":
-                  if (data.runId) {
-                    dispatch({ type: "SET_RUN_ID", runId: data.runId });
-                    if (data.content) {
-                      bufferRef.current += data.content;
-                      if (timerRef.current) clearTimeout(timerRef.current);
-                      timerRef.current = setTimeout(flushBuffer, 50);
-                    }
-                  }
-                  break;
-
                 case "token":
                   bufferRef.current += data.content || "";
                   if (timerRef.current) clearTimeout(timerRef.current);
@@ -247,35 +226,22 @@ export function useAgentChat(agentId?: string): UseAgentChatReturn {
                   break;
 
                 case "tool_call":
-                  if (data.toolName) {
-                    dispatch({ type: "ADD_TOOL_CALL", name: data.toolName });
-                  }
-                  if (data.content) {
-                    bufferRef.current += data.content;
-                    if (timerRef.current) clearTimeout(timerRef.current);
-                    timerRef.current = setTimeout(flushBuffer, 50);
+                  if (data.name) {
+                    dispatch({ type: "ADD_TOOL_CALL", name: data.name });
                   }
                   break;
 
                 case "tool_result":
-                  if (data.content) {
-                    bufferRef.current += data.content;
-                    if (timerRef.current) clearTimeout(timerRef.current);
-                    timerRef.current = setTimeout(flushBuffer, 50);
-                  }
                   break;
 
-                case "run_complete":
+                case "done":
                   flushBuffer();
-                  if (data.runId) {
-                    dispatch({ type: "SET_RUN_ID", runId: data.runId });
-                  }
                   break;
 
                 case "error":
                   dispatch({
                     type: "SET_ERROR",
-                    error: data.error || "Unknown error from server",
+                    error: data.content || "Unknown error from server",
                   });
                   break;
               }

@@ -1,0 +1,31 @@
+Add authentication routes to the backend API server.
+
+Create a new file backend/api-server/src/routes/auth.rs with these endpoints:
+
+1. POST /api/auth/register - Create a new user
+   - Body: { email: String, password: String, name: String }
+   - Hash password with bcrypt (cost 12)
+   - Insert into a new "users" table (id UUID, email TEXT UNIQUE, password_hash TEXT, name TEXT, created_at TIMESTAMPTZ)
+   - Also create a default workspace for the user using create_workspace_with_owner function
+   - Return: { token: String, user: { id, email, name } }
+   - The token is a JWT with Claims { sub: user_id, workspace_id: default_workspace_id, exp: now + 24h }
+
+2. POST /api/auth/login - Login with email/password
+   - Body: { email: String, password: String }
+   - Look up user by email, verify password with bcrypt
+   - Get user's default workspace (first workspace_members entry)
+   - Return: { token: String, user: { id, email, name } }
+
+3. GET /api/auth/me - Get current user info
+   - Protected by auth_middleware
+   - Return: { id, email, name }
+
+Add the auth routes to the router in backend/api-server/src/lib.rs as public routes (no auth middleware needed for register/login, but /api/auth/me needs auth).
+
+Also create the users table migration. Add a new file backend/migrations/0003_users.sql with the users table.
+
+For the JWT token generation, create a helper function in the auth module:
+fn generate_token(claims: &Claims, secret: &str) -> Result<String, jsonwebtoken::errors::Error>
+Use HS256 algorithm, exp = Utc::now() + 24 hours.
+
+Work fast. Make all edits in one pass per file.

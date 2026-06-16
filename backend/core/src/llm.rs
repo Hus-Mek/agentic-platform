@@ -135,8 +135,8 @@ impl LiteLLMClient {
 
         Self {
             client,
-            base_url: config.litellm_proxy_url.clone(),
-            api_key: config.jwt_secret.clone(),
+            base_url: config.llm_base_url.clone(),
+            api_key: config.llm_api_key.clone(),
         }
     }
 
@@ -275,6 +275,33 @@ impl LiteLLMClient {
                 cost,
             },
         })
+    }
+
+    pub async fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
+        let url = format!("{}/v1/embeddings", self.base_url);
+        let body = serde_json::json!({
+            "model": "text-embedding-3-small",
+            "input": text,
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AgentError::Internal(format!("Embedding request failed: {e}")))?;
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| AgentError::Internal(format!("Embedding parse failed: {e}")))?;
+
+        let embedding: Vec<f64> = serde_json::from_value(
+            data["data"][0]["embedding"].clone()
+        ).map_err(|e| AgentError::Internal(format!("Embedding format error: {e}")))?;
+
+        Ok(embedding.into_iter().map(|v| v as f32).collect())
     }
 
     pub async fn chat_completion_stream(

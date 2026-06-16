@@ -1,0 +1,27 @@
+Create three new pages in the frontend:
+
+1. frontend/app/agents/page.tsx - Agents list page
+   - Fetch GET /api/agents from the API
+   - Display agents in a table/card grid with columns: Name, Description, Model, Status, Created At
+   - Each agent links to /agents/{id}
+   - Add a "New Agent" button at the top
+   - Use the same dark theme CSS classes as the existing pages (card, btn-primary, etc.)
+
+2. frontend/app/agents/[id]/page.tsx - Agent detail page
+   - Use useParams or params prop to get the agent id
+   - Fetch GET /api/agents/{id} to get agent details
+   - Show agent name, description, instructions, model, tools, guard config, memory config
+   - Include the AgentChat component (from ../components/AgentChat) for chatting with the agent
+   - Include a "Run History" section that fetches GET /api/runs?agent_id={id}
+
+3. frontend/app/runs/page.tsx - Runs list page
+   - Fetch GET /api/runs from the API
+   - Display runs in a table with columns: Run ID, Agent, Status, Duration, Tokens, Created At
+   - Each run links to /runs/{id}
+   - Add filter dropdown for status (all, running, completed, failed, cancelled)
+
+All pages should use the existing layout (navbar is in layout.tsx).
+Use process.env.NEXT_PUBLIC_API_URL or default to http://localhost:8000.
+Add loading and error states.
+
+Work fast. Create all files in one pass.

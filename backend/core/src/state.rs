@@ -130,7 +130,7 @@ pub struct ToolDefinition {
     pub required: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentState {
     pub messages: Vec<Message>,
     pub agent_id: Option<String>,
@@ -143,6 +143,7 @@ pub struct AgentState {
     pub guard_config: GuardConfig,
     pub memory_config: MemoryConfig,
     pub memory_contents: Vec<String>,
+    pub kb_contents: Vec<String>,
     pub guard_decision: Option<GuardDecision>,
     pub token_budget: i64,
     pub total_tokens_used: i64,
@@ -176,6 +177,7 @@ impl AgentState {
             guard_config: GuardConfig::default(),
             memory_config: MemoryConfig::default(),
             memory_contents: Vec::new(),
+            kb_contents: Vec::new(),
             guard_decision: None,
             token_budget: 100000,
             total_tokens_used: 0,
@@ -218,4 +220,87 @@ impl AgentState {
     pub fn increment_iteration(&mut self) {
         self.iteration += 1;
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubAgentConfig {
+    pub id: String,
+    pub name: String,
+    pub instructions: String,
+    pub model: String,
+    pub tools: Vec<ToolDefinition>,
+    pub guard_config: GuardConfig,
+}
+
+impl Default for SubAgentConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            instructions: String::new(),
+            model: "gpt-4".into(),
+            tools: Vec::new(),
+            guard_config: GuardConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ExecutionMode {
+    Sequential,
+    Parallel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamConfig {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub supervisor_instructions: String,
+    pub supervisor_model: String,
+    pub sub_agents: Vec<SubAgentConfig>,
+    pub max_delegations: u32,
+    pub execution_mode: ExecutionMode,
+}
+
+impl Default for TeamConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            description: None,
+            supervisor_instructions: String::new(),
+            supervisor_model: "gpt-4".into(),
+            sub_agents: Vec::new(),
+            max_delegations: 10,
+            execution_mode: ExecutionMode::Sequential,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DelegationResult {
+    pub sub_agent_id: String,
+    pub sub_agent_name: String,
+    pub task: String,
+    pub result: String,
+    pub tokens_used: i64,
+    pub cost: f64,
+    pub duration_ms: i64,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamRunState {
+    pub team_id: String,
+    pub run_id: String,
+    pub workspace_id: Option<String>,
+    pub user_id: Option<String>,
+    pub input: String,
+    pub supervisor_state: AgentState,
+    pub delegations: Vec<DelegationResult>,
+    pub status: String,
+    pub total_tokens_used: i64,
+    pub total_cost: f64,
 }

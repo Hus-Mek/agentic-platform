@@ -17,6 +17,7 @@ use agenticos_core::state::{AgentState, GuardConfig, MemoryConfig, Message, Tool
 
 use crate::middleware::auth::Claims;
 use crate::models::AgentRow;
+use crate::models::AgentVersionRow;
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -63,19 +64,9 @@ pub struct RunResponse {
     pub status: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct AgentVersionRow {
-    pub version_number: i32,
-    pub agent_id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub instructions: String,
-    pub model: String,
-    pub tools: serde_json::Value,
-    pub guard_config: serde_json::Value,
-    pub memory_config: serde_json::Value,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+#[derive(Debug, Deserialize)]
+pub struct DeployRequest {
+    pub environment: String,
 }
 
 fn internal_error<E: std::fmt::Display>(e: E) -> (axum::http::StatusCode, Json<serde_json::Value>) {
@@ -200,6 +191,7 @@ pub async fn get_agent(
 pub async fn update_agent(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
+    Extension(claims): Extension<Claims>,
     Json(body): Json<UpdateAgentRequest>,
 ) -> Result<Json<AgentRow>, (axum::http::StatusCode, Json<serde_json::Value>)> {
     let existing = sqlx::query_as::<_, AgentRow>(
@@ -232,6 +224,36 @@ pub async fn update_agent(
     .bind(&memory_config)
     .bind(now)
     .bind(id)
+    .execute(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    let config_snapshot = serde_json::json!({
+        "name": name,
+        "description": description,
+        "instructions": instructions,
+        "model": model,
+        "tools": tools,
+        "guard_config": guard_config,
+        "memory_config": memory_config,
+    });
+
+    let next_version: (i32,) = sqlx::query_as(
+        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM agent_versions WHERE agent_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    sqlx::query(
+        "INSERT INTO agent_versions (agent_id, version_number, config_snapshot, created_by, created_at) VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(id)
+    .bind(next_version.0)
+    .bind(&config_snapshot)
+    .bind(&claims.sub)
+    .bind(now)
     .execute(&state.db)
     .await
     .map_err(internal_error)?;
@@ -272,6 +294,30 @@ pub async fn list_versions(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<AgentVersionRow>>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    sqlx::query_as::<_, AgentRow>("SELECT * FROM agents WHERE id = $1 AND is_active = true")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| not_found("Agent not found"))?;
+
+    let versions = sqlx::query_as::<_, AgentVersionRow>(
+        "SELECT * FROM agent_versions WHERE agent_id = $1 ORDER BY version_number DESC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    Ok(Json(versions))
+}
+
+pub async fn deploy_agent(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<DeployRequest>,
+) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<serde_json::Value>)> {
     let agent = sqlx::query_as::<_, AgentRow>(
         "SELECT * FROM agents WHERE id = $1 AND is_active = true",
     )
@@ -281,21 +327,121 @@ pub async fn list_versions(
     .map_err(internal_error)?
     .ok_or_else(|| not_found("Agent not found"))?;
 
-    let version = AgentVersionRow {
-        version_number: 1,
-        agent_id: agent.id,
-        name: agent.name,
-        description: agent.description,
-        instructions: agent.instructions,
-        model: agent.model,
-        tools: agent.tools,
-        guard_config: agent.guard_config,
-        memory_config: agent.memory_config,
-        created_at: agent.created_at,
-        updated_at: agent.updated_at,
-    };
+    let config_snapshot = serde_json::json!({
+        "name": agent.name,
+        "description": agent.description,
+        "instructions": agent.instructions,
+        "model": agent.model,
+        "tools": agent.tools,
+        "guard_config": agent.guard_config,
+        "memory_config": agent.memory_config,
+    });
 
-    Ok(Json(vec![version]))
+    let next_version: (i32,) = sqlx::query_as(
+        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM agent_versions WHERE agent_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    let now = Utc::now();
+
+    sqlx::query(
+        "INSERT INTO agent_versions (agent_id, version_number, config_snapshot, created_by, created_at) VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(id)
+    .bind(next_version.0)
+    .bind(&config_snapshot)
+    .bind(&claims.sub)
+    .bind(now)
+    .execute(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    Ok(Json(serde_json::json!({
+        "version_number": next_version.0,
+        "agent_id": id,
+        "environment": body.environment,
+        "deployed_at": now,
+    })))
+}
+
+pub async fn rollback_agent(
+    State(state): State<AppState>,
+    Path((id, version)): Path<(Uuid, i32)>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<AgentRow>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    sqlx::query_as::<_, AgentRow>("SELECT * FROM agents WHERE id = $1 AND is_active = true")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| not_found("Agent not found"))?;
+
+    let version_row = sqlx::query_as::<_, AgentVersionRow>(
+        "SELECT * FROM agent_versions WHERE agent_id = $1 AND version_number = $2",
+    )
+    .bind(id)
+    .bind(version)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(internal_error)?
+    .ok_or_else(|| not_found("Version not found"))?;
+
+    let snapshot = &version_row.config_snapshot;
+    let name = snapshot.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+    let description = snapshot.get("description").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let instructions = snapshot.get("instructions").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+    let model = snapshot.get("model").and_then(|v| v.as_str()).unwrap_or("gpt-4o").to_string();
+    let tools = snapshot.get("tools").cloned().unwrap_or(serde_json::json!([]));
+    let guard_config = snapshot.get("guard_config").cloned().unwrap_or(serde_json::json!({}));
+    let memory_config = snapshot.get("memory_config").cloned().unwrap_or(serde_json::json!({}));
+    let now = Utc::now();
+
+    sqlx::query(
+        "UPDATE agents SET name = $1, description = $2, instructions = $3, model = $4, tools = $5, guard_config = $6, memory_config = $7, updated_at = $8 WHERE id = $9",
+    )
+    .bind(&name)
+    .bind(&description)
+    .bind(&instructions)
+    .bind(&model)
+    .bind(&tools)
+    .bind(&guard_config)
+    .bind(&memory_config)
+    .bind(now)
+    .bind(id)
+    .execute(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    let next_version: (i32,) = sqlx::query_as(
+        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM agent_versions WHERE agent_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    sqlx::query(
+        "INSERT INTO agent_versions (agent_id, version_number, config_snapshot, created_by, created_at) VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(id)
+    .bind(next_version.0)
+    .bind(&version_row.config_snapshot)
+    .bind(&claims.sub)
+    .bind(Utc::now())
+    .execute(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    let updated = sqlx::query_as::<_, AgentRow>("SELECT * FROM agents WHERE id = $1")
+        .bind(id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(internal_error)?;
+
+    Ok(Json(updated))
 }
 
 pub async fn run_agent(
@@ -361,6 +507,8 @@ pub async fn run_agent(
         &state.tool_registry,
         &state.guard_engine,
         &state.memory_client,
+        Some(&state.kb_retriever),
+        &state.db,
     )
     .await
     {
@@ -518,7 +666,9 @@ pub async fn run_agent_stream(
             &state_for_task.tool_registry,
             &state_for_task.guard_engine,
             &state_for_task.memory_client,
+            Some(&state_for_task.kb_retriever),
             tx.clone(),
+            &db,
         )
         .await
         {
@@ -546,6 +696,14 @@ pub async fn run_agent_stream(
                 let _ = tx
                     .send(StreamEvent::Error(e.to_string()))
                     .await;
+
+                let _ = sqlx::query(
+                    "UPDATE runs SET status = 'failed', error = $1 WHERE id = $2",
+                )
+                .bind(e.to_string())
+                .bind(&run_id_str)
+                .execute(&db)
+                .await;
             }
         }
     });

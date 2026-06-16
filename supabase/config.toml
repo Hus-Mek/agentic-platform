@@ -1,0 +1,208 @@
+# Supabase Configuration — AgenticOS Platform
+# =============================================
+# This file configures the Supabase local development stack.
+# The project uses custom JWT auth (Axum middleware), not Supabase Auth.
+# Supabase provides the PostgREST API, Studio dashboard, and the auth schema
+# (needed for auth.uid() in RLS policies).
+#
+# Generated: 2026-06-15
+
+project_id = "agentic-platform"
+
+# --------------------------------------------------
+# API — PostgREST gateway (Kong)
+# --------------------------------------------------
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[api.tls]
+enabled = false
+
+# --------------------------------------------------
+# Database — Supabase's managed PostgreSQL
+# NOTE: This is SEPARATE from the project's main PostgreSQL (port 5432).
+# The project's PostgreSQL runs via docker-compose and is used by the
+# Rust API server, Langfuse, and other services.
+# Supabase's internal DB (port 54322) is only for:
+#   1. Supabase internal tables (auth, storage, etc.)
+#   2. Running migrations via `supabase db push`
+#   3. Supabase Studio queries
+# --------------------------------------------------
+[db]
+port = 54322
+major_version = 16
+shadow_port = 54320
+
+[db.pooler]
+enabled = false
+pool_mode = "transaction"
+default_pool_size = 10
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = true
+
+[db.network_restrictions]
+enabled = false
+
+# --------------------------------------------------
+# Realtime — Broadcast, presence, and Postgres CDC
+# --------------------------------------------------
+[realtime]
+enabled = true
+ip_version = "IPv4"
+
+# --------------------------------------------------
+# Studio — Dashboard UI
+# NOTE: Port 54323 is used (not 3000) because Langfuse
+# already occupies port 3000 in docker-compose.
+# --------------------------------------------------
+[studio]
+enabled = true
+port = 54323
+
+# --------------------------------------------------
+# Storage — File uploads (S3-compatible)
+# --------------------------------------------------
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+# --------------------------------------------------
+# Auth — Supabase Auth (minimally enabled)
+# The project uses custom JWT auth in the Rust API server.
+# Supabase Auth is enabled primarily to provide the auth.uid()
+# function used by RLS policies in the schema.
+# --------------------------------------------------
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 86400
+enable_refresh_token_rotation = false
+enable_signup = false
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+secure_password_change = false
+max_frequency = "1s"
+otp_expiry = 3600
+
+[auth.sms]
+enable_signup = false
+
+[auth.sessions]
+timebox = 86400
+inactivity_timeout = 1800
+
+# All external OAuth providers are disabled — auth is custom
+[auth.external.apple]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.azure]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.bitbucket]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.discord]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.facebook]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.github]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.gitlab]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.google]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.keycloak]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.linkedin]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.notion]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.twitch]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.twitter]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.slack]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.spotify]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.workos]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.zoom]
+enabled = false
+client_id = ""
+secret = ""
+
+# --------------------------------------------------
+# Edge Runtime — Deno-based functions
+# --------------------------------------------------
+[edge_runtime]
+enabled = false
+
+# --------------------------------------------------
+# Analytics — Postgres-backed usage tracking
+# --------------------------------------------------
+[analytics]
+enabled = false
+backend = "postgres"
+
+# --------------------------------------------------
+# Experimental features
+# --------------------------------------------------
+[experimental]

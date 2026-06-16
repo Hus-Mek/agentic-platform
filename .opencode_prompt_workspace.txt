@@ -1,0 +1,49 @@
+Add workspace management routes to the backend API server.
+
+Create a new file backend/api-server/src/routes/workspaces.rs with these endpoints:
+
+1. GET /api/workspaces - List workspaces for current user
+   - Protected by auth_middleware
+   - Query workspace_members for the user_id from claims
+   - Return: Vec of { id, name, slug, role, created_at }
+
+2. POST /api/workspaces - Create a new workspace
+   - Protected by auth_middleware
+   - Body: { name: String, slug: String }
+   - Insert into workspaces table
+   - Insert into workspace_members with role "owner" and user_id from claims
+   - Return: { id, name, slug, created_at }
+
+3. GET /api/workspaces/{id} - Get workspace details
+   - Protected by auth_middleware
+   - Verify user has access to workspace
+   - Return workspace info + member count
+
+4. PUT /api/workspaces/{id} - Update workspace
+   - Protected by auth_middleware
+   - Only owner/admin can update
+   - Body: { name: Option<String>, slug: Option<String> }
+
+5. DELETE /api/workspaces/{id} - Delete workspace
+   - Protected by auth_middleware
+   - Only owner can delete
+
+6. GET /api/workspaces/{id}/members - List workspace members
+   - Protected by auth_middleware
+   - Return: Vec of { user_id, role, created_at }
+
+7. POST /api/workspaces/{id}/members - Add member
+   - Protected by auth_middleware
+   - Only owner/admin can add
+   - Body: { user_id: String, role: String }
+
+8. DELETE /api/workspaces/{id}/members/{user_id} - Remove member
+   - Protected by auth_middleware
+   - Only owner/admin can remove
+
+Add the workspace routes to the router in backend/api-server/src/lib.rs as protected routes (behind auth_middleware).
+
+Use the existing WorkspaceRow model from models.rs.
+Use the existing check_workspace_access SQL function for authorization.
+
+Work fast. Make all edits in one pass per file.

@@ -1,0 +1,27 @@
+Persist run steps during agent execution in the backend.
+
+Currently the agent runtime (agent-runtime/src/loop_mod.rs and streaming.rs) emits UDM events but never writes to the run_steps table. We need to persist each step.
+
+1. In backend/agent-runtime/src/loop_mod.rs, modify the run_agent function:
+   - Add a db parameter: db: &sqlx::PgPool
+   - After each plan step completes (PlanResult::Text or PlanResult::ToolCalls), insert a row into run_steps:
+     INSERT INTO run_steps (id, run_id, step_type, node_name, input, output, duration_ms, tokens_used, metadata, created_at)
+     VALUES ($1, $2, 'plan', 'plan', $3, $4, $5, $6, $7, now())
+   - After each tool execution, insert a row:
+     INSERT INTO run_steps (id, run_id, step_type, node_name, input, output, duration_ms, tokens_used, metadata, created_at)
+     VALUES ($1, $2, 'tool', $3, $4, $5, $6, $7, $8, now())
+   - After each guard evaluation, insert a row:
+     INSERT INTO run_steps (id, run_id, step_type, node_name, input, output, duration_ms, tokens_used, metadata, created_at)
+     VALUES ($1, $2, 'evaluate', 'evaluate', $3, $4, $5, $6, $7, now())
+
+2. In backend/agent-runtime/src/streaming.rs, do the same for the streaming version.
+
+3. Update the function signatures to accept db: &sqlx::PgPool and pass it through.
+
+4. In backend/api-server/src/routes/agents.rs, pass &state.db to the run_agent and run_agent_streaming calls.
+
+5. For the UDM events, extract the event_id, event_type, result duration/tokens, and serialize the event as JSON for the metadata column.
+
+Keep the UDM event emission as-is, just add the DB insert after each emit.
+
+Work fast. Make all edits in one pass per file.

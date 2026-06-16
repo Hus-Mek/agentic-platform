@@ -1,11 +1,12 @@
 use agenticos_core::state::{AgentState, GuardAction, GuardDecision};
 use agenticos_core::udm::{AgentEvent, EventResult, EventType};
 
+#[tracing::instrument(skip_all, fields(guard_type, action = ?guard_decision.action))]
 pub async fn evaluate_step(
     state: &mut AgentState,
     guard_decision: GuardDecision,
     guard_type: &str,
-    tool_name: Option<&str>,
+    _tool_name: Option<&str>,
 ) -> anyhow::Result<GuardAction> {
     state.current_node = Some("evaluate".into());
 

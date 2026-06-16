@@ -1,0 +1,19 @@
+Make the dashboard in frontend/app/page.tsx fetch real data from the API instead of using hardcoded static data.
+
+The dashboard currently has hardcoded stats and recent runs in useState. Replace with real API calls:
+
+1. Create a fetchJson helper: async function fetchJson(url: string, token?: string) that calls fetch with JSON headers and returns parsed JSON.
+
+2. On page load (useEffect with [] dependency), fetch:
+   - GET /api/agents?workspace_id={ws_id} to get agents count
+   - GET /api/runs?workspace_id={ws_id} to get recent runs
+   - Compute stats from real data: active agents count, total runs count, success rate, avg duration
+
+3. For now, use a hardcoded workspace_id of "00000000-0000-0000-0000-000000000001" since auth is not yet wired up on frontend.
+   The API URL should come from process.env.NEXT_PUBLIC_API_URL or default to http://localhost:8000.
+
+4. Add loading state: show a loading spinner while data is being fetched.
+5. Add error state: show error message if fetch fails.
+6. Keep the same visual design (stats cards, recent runs table, quick actions).
+
+Work fast. Make all edits in one pass.

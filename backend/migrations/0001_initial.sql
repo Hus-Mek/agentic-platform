@@ -5,6 +5,10 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "vector";
 
+-- Supabase-compatible auth schema stub (harmless if real auth schema exists)
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS UUID LANGUAGE SQL STABLE AS $$ SELECT NULL::UUID; $$;
+
 -- Updated_at trigger
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -29,7 +33,10 @@ CREATE TRIGGER trg_workspaces_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Workspace members
-CREATE TYPE IF NOT EXISTS member_role AS ENUM ('owner', 'admin', 'member', 'viewer');
+DO $$ BEGIN
+  CREATE TYPE member_role AS ENUM ('owner', 'admin', 'member', 'viewer');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS workspace_members (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -94,7 +101,10 @@ CREATE TABLE IF NOT EXISTS agent_versions (
 CREATE INDEX IF NOT EXISTS idx_agent_versions_agent_id ON agent_versions(agent_id);
 
 -- Runs
-CREATE TYPE IF NOT EXISTS run_status AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled');
+DO $$ BEGIN
+  CREATE TYPE run_status AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS runs (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -123,7 +133,10 @@ CREATE TRIGGER trg_runs_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Run steps
-CREATE TYPE IF NOT EXISTS step_type AS ENUM ('plan', 'tool', 'evaluate', 'guard', 'message', 'other');
+DO $$ BEGIN
+  CREATE TYPE step_type AS ENUM ('plan', 'tool', 'evaluate', 'guard', 'message', 'other');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS run_steps (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

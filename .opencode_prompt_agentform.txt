@@ -1,0 +1,18 @@
+Wire up the AgentForm in frontend/components/AgentForm.tsx to actually POST to the backend API.
+
+Currently the AgentForm has an onSubmit prop that is never wired to an API call. The form collects data but does nothing with it.
+
+1. The form currently has tools as string array like ["web_search", "calculator"]. The backend expects tools as JSON array of objects with name/description/parameters. For now, convert each tool string to { type: "function", function: { name: toolName, description: toolName, parameters: { type: "object", properties: {} } } }.
+
+2. The guard_config in the form has fields like pii_redaction, toxicity_filter etc. The backend expects inspector_enabled, bodyguard_enabled, pii_detection, max_tokens_per_response. Map: inspector_enabled = toxicity_filter, bodyguard_enabled = true if any guard enabled, pii_detection = pii_redaction, max_tokens_per_response = max_tokens_per_response.
+
+3. The memory_config in the form has fields like type, max_history, summarization, vector_search. The backend expects enabled, memory_type, max_memories. Map: enabled = enabled, memory_type = type, max_memories = max_history.
+
+4. Import and use fetch to POST to /api/agents with the transformed data.
+   API URL from process.env.NEXT_PUBLIC_API_URL or http://localhost:8000.
+   For now, include a hardcoded workspace_id in the token claims or skip auth header.
+
+5. On success, show a success message and call onCancel to close the form.
+6. On error, show the error message in the form.
+
+Work fast. Make all edits in one pass.
