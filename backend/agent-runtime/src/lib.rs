@@ -19,6 +19,7 @@ pub mod tool;
 pub mod approval;
 pub mod architect;
 pub mod evolver;
+pub mod meta_harness;
 
 pub use context::{ContextConfig, ContextManager};
 pub use loop_mod::run_agent;

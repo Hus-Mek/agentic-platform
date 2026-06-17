@@ -16,5 +16,6 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 reqwest = { workspace = true }
 sqlx = { workspace = true }
+async-trait = "0.1"
 futures = { workspace = true }
 thiserror = { workspace = true }
