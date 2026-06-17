@@ -122,7 +122,7 @@ impl Metric for ContainsMatchMetric {
 }
 
 /// An evaluation task
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalTask {
     pub id: String,
     pub description: String,
@@ -146,18 +146,8 @@ pub struct EvalResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkSuite {
     pub name: String,
-    pub tasks: Vec<EvalTaskRequest>,
+    pub tasks: Vec<EvalTask>,
     pub metrics: Vec<String>,
-}
-
-/// Request to create an eval task
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvalTaskRequest {
-    pub id: String,
-    pub description: String,
-    pub expected_output: String,
-    pub metrics: Vec<String>,
-    pub max_iterations: u32,
 }
 
 impl BenchmarkSuite {
@@ -166,21 +156,21 @@ impl BenchmarkSuite {
         Self {
             name: "agentic-os-standard".into(),
             tasks: vec![
-                EvalTaskRequest {
+                EvalTask {
                     id: "basic_echo".into(),
                     description: "Echo back the text: hello world".into(),
                     expected_output: "hello world".into(),
                     metrics: vec!["exact_match".into(), "contains_match".into()],
                     max_iterations: 3,
                 },
-                EvalTaskRequest {
+                EvalTask {
                     id: "translation_es".into(),
                     description: "Translate to Spanish: Good morning".into(),
                     expected_output: "Buenos días".into(),
                     metrics: vec!["bleu".into(), "chrf".into(), "contains_match".into()],
                     max_iterations: 5,
                 },
-                EvalTaskRequest {
+                EvalTask {
                     id: "contains_check".into(),
                     description: "What is the capital of France?".into(),
                     expected_output: "Paris".into(),

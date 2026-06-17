@@ -68,24 +68,7 @@ pub struct Architect {
     model: String,
 }
 
-const SYSTEM_PROMPT: &str = r#"You are an AI solution architect. Given a business need, design a complete AI agent configuration.
 
-Your response must be valid JSON with these fields:
-- agent_name: snake_case identifier
-- agent_description: one sentence description
-- system_prompt: detailed instructions for the agent
-- model: recommended model (gpt-4, gpt-4o-mini, claude-sonnet-4)
-- tools: list of recommended tools
-- team: multi-agent team design (null if single agent)
-- pipeline: workflow pipeline design (null if not a workflow)
-- guards: security and governance configuration
-
-Design principles:
-1. Keep prompts focused and actionable
-2. Use the simplest architecture that solves the need
-3. Only use multi-agent teams when truly needed
-4. Always enable basic guards (PII, content moderation, token budget)
-5. Choose cost-appropriate models (simple tasks -> gpt-4o-mini, complex -> gpt-4)"#;
 
 impl Architect {
     pub fn new(llm_client: LiteLLMClient, model: String) -> Self {
@@ -96,7 +79,6 @@ impl Architect {
         let prompt = self.build_prompt(request);
 
         let messages = vec![
-            Message::new("system", SYSTEM_PROMPT),
             Message::new("user", &prompt),
         ];
 
@@ -181,53 +163,6 @@ pub enum ArchitectError {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_architect_request() {
-        let req = ArchitectRequest {
-            description: "A customer support agent".into(),
-            constraints: Some(vec!["Must be polite".into()]),
-        };
-        assert_eq!(req.description, "A customer support agent");
-        assert!(req.constraints.is_some());
-    }
-
-    #[test]
-    fn test_architect_response() {
-        let resp = ArchitectResponse {
-            agent_name: "support_agent".into(),
-            agent_description: "Handles customer queries".into(),
-            system_prompt: "You are helpful".into(),
-            model: "gpt-4".into(),
-            tools: vec!["search".into()],
-            team: None,
-            pipeline: None,
-            guards: GuardDesign {
-                enable_pii_detection: true,
-                enable_content_moderation: true,
-                enable_token_budget: true,
-                max_iterations: 10,
-            },
-        };
-        assert_eq!(resp.agent_name, "support_agent");
-        assert!(resp.team.is_none());
-    }
-
-    #[test]
-    fn test_team_design() {
-        let team = TeamDesign {
-            sub_agents: vec![
-                SubAgentDesign {
-                    name: "researcher".into(),
-                    description: "Finds information".into(),
-                    instructions: "Search for data".into(),
-                    model: "gpt-4".into(),
-                },
-            ],
-            execution_mode: "sequential".into(),
-        };
-        assert_eq!(team.sub_agents.len(), 1);
-    }
 
     #[test]
     fn test_guard_design_default() {

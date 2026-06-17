@@ -8,7 +8,6 @@ pub mod orchestrator;
 pub mod plan;
 pub mod plan_executor;
 pub mod pipeline_engine;
-pub mod pipeline_runner;
 pub mod prompt_builder;
 pub mod rag;
 pub mod recovery;
