@@ -23,9 +23,11 @@ impl AppConfig {
             llm_api_key: env::var("LLM_API_KEY")
                 .unwrap_or_else(|_| env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret-change-in-production".into())),
             llm_base_url: env::var("LLM_BASE_URL")
-                .unwrap_or_else(|_| "https://openrouter.ai/api/v1".into()),
+                .map(|s| s.trim_end_matches("/v1").trim_end_matches('/').to_string())
+                .unwrap_or_else(|_| "https://openrouter.ai/api".into()),
             embedding_base_url: env::var("EMBEDDING_BASE_URL")
-                .unwrap_or_else(|_| env::var("LLM_BASE_URL").unwrap_or_else(|_| "https://openrouter.ai/api/v1".into())),
+                .map(|s| s.trim_end_matches("/v1").trim_end_matches('/').to_string())
+                .unwrap_or_else(|_| "https://openrouter.ai/api".into()),
             qdrant_url: env::var("QDRANT_URL")
                 .unwrap_or_else(|_| "http://localhost:6333".into()),
             environment: env::var("ENVIRONMENT")

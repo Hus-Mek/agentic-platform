@@ -1,4 +1,5 @@
 use agenticos_core::state::{GuardAction, GuardDecision};
+use crate::responder::Responder;
 use agenticos_core::udm::{AgentEvent, EventResult, EventType, Observable};
 
 use crate::evaluate::evaluate_step;
@@ -19,6 +20,7 @@ pub async fn run_agent(
     memory_client: &agenticos_memory::MemoryClient,
     kb_retriever: Option<&KbRetriever>,
     db: &PgPool,
+    output_schema: Option<agenticos_core::OutputSchema>,
 ) -> anyhow::Result<()> {
     AgentEvent::new(
         EventType::AgentRunStarted,
@@ -29,7 +31,7 @@ pub async fn run_agent(
     )
     .emit();
 
-    let result = run_inner(state, llm_client, tool_registry, guard_engine, memory_client, kb_retriever, db).await;
+    let result = run_inner(state, llm_client, tool_registry, guard_engine, memory_client, kb_retriever, db, &output_schema).await;
 
     match &result {
         Ok(_) => {
@@ -77,6 +79,7 @@ async fn run_inner(
     memory_client: &agenticos_memory::MemoryClient,
     kb_retriever: Option<&KbRetriever>,
     db: &PgPool,
+    output_schema: &Option<agenticos_core::OutputSchema>,
 ) -> anyhow::Result<()> {
     while !state.should_stop() {
         // Context window management: prune messages if approaching limit
@@ -386,6 +389,30 @@ async fn run_inner(
         }
     }
 
+    // Responder: validate and fix final output if schema is configured
+    if let Some(schema) = output_schema {
+        let last_output = state.messages.last()
+            .map(|m| m.content.clone())
+            .unwrap_or_default();
+        if !last_output.is_empty() {
+            let responder = Responder::new(llm_client.clone(), state.model.clone());
+            match responder.validate_and_fix(&last_output, schema).await {
+                Ok(fixed) => {
+                    if fixed != last_output {
+                        tracing::info!("Responder fixed agent output to match schema");
+                        state.add_message(agenticos_core::state::Message::new(
+                            "system",
+                            &format!("[Responder corrected output to match schema: {}]", fixed),
+                        ));
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Responder validation failed (non-fatal): {e}");
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -404,7 +431,7 @@ async fn insert_run_step(
         return Ok(());
     };
     sqlx::query(
-        "INSERT INTO run_steps (id, run_id, step_type, node_name, input, output, duration_ms, tokens_used, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())",
+        "INSERT INTO run_steps (id, run_id, step_type, node_name, input, output, duration_ms, tokens_used, metadata, created_at) VALUES ($1, $2, $3::step_type, $4, $5, $6, $7, $8, $9, now())",
     )
     .bind(Uuid::new_v4())
     .bind(run_id)

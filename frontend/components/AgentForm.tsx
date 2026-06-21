@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Save, X, ChevronDown, ChevronRight, Wrench, Shield, Database } from "lucide-react";
+
+interface ModelOption {
+  value: string;
+  label: string;
+}
 
 interface AgentFormData {
   name: string;
@@ -32,13 +37,6 @@ interface AgentFormProps {
   onCancel: () => void;
 }
 
-const MODELS = [
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "claude-sonnet-4", label: "Claude Sonnet 4" },
-  { value: "claude-haiku-3-5", label: "Claude Haiku 3.5" },
-];
-
 const AVAILABLE_TOOLS = [
   { value: "web_search", label: "Web Search" },
   { value: "kb_search", label: "Knowledge Base Search" },
@@ -50,16 +48,49 @@ const AVAILABLE_TOOLS = [
   { value: "http_request", label: "HTTP Request" },
 ];
 
+function modelSlugToLabel(id: string): string {
+  // "meta-llama/llama-3.3-70b-instruct:free" -> "Llama 3.3 70B Instruct (free)"
+  const stripped = id.replace(":free", "").split("/").pop() || id;
+  return stripped
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .concat(" (free)");
+}
+
 export default function AgentForm({
   initialData,
   onSubmit,
   onCancel,
 }: AgentFormProps) {
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [defaultModel, setDefaultModel] = useState<string>("");
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    fetch(`${apiUrl}/api/models`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: { id: string; provider?: string }[]) => {
+        const opts: ModelOption[] = data.map((m) => ({
+          value: m.id,
+          label: `${modelSlugToLabel(m.id)}${m.provider ? ` · ${m.provider}` : ""}`,
+        }));
+        setModels(opts);
+        if (opts.length > 0 && !initialData?.model) {
+          setDefaultModel(opts[0].value);
+        }
+      })
+      .catch(() => {
+        // Fallback to a sensible default if API is unreachable
+        setModels([{ value: "openai/gpt-oss-120b:free", label: "GPT-OSS 120B (free)" }]);
+        setDefaultModel("openai/gpt-oss-120b:free");
+      });
+  }, []);
+
   const [data, setData] = useState<AgentFormData>({
     name: initialData?.name ?? "",
     description: initialData?.description ?? "",
     instructions: initialData?.instructions ?? "",
-    model: initialData?.model ?? "gpt-4o",
+    model: initialData?.model ?? "",
     tools: initialData?.tools ?? [],
     guard_config: initialData?.guard_config ?? {
       enabled: false,
@@ -77,6 +108,13 @@ export default function AgentForm({
       vector_search: false,
     },
   });
+
+  // Once models load and there's no explicit model from initialData, pick the first free one.
+  useEffect(() => {
+    if (defaultModel && !initialData?.model && !data.model) {
+      setData((d) => ({ ...d, model: defaultModel }));
+    }
+  }, [defaultModel, initialData?.model, data.model]);
 
   const [showGuards, setShowGuards] = useState(
     initialData?.guard_config?.enabled ?? false
@@ -165,20 +203,21 @@ export default function AgentForm({
       description: data.description,
       instructions: data.instructions,
       model: data.model,
-      tools: data.tools.map((name) => ({
-        type: "function",
-        function: { name, description: name, parameters: { type: "object", properties: {} } },
-      })),
+      tools: data.tools,
       guard_config: {
-        inspector_enabled: guard.toxicity_filter,
-        bodyguard_enabled: guard.enabled,
-        pii_detection: guard.pii_redaction,
+        enabled: guard.enabled,
+        pii_redaction: guard.pii_redaction,
+        toxicity_filter: guard.toxicity_filter,
         max_tokens_per_response: guard.max_tokens_per_response,
+        allowed_topics: guard.allowed_topics,
+        blocked_topics: guard.blocked_topics,
       },
       memory_config: {
         enabled: mem.enabled,
         memory_type: mem.type,
-        max_memories: mem.max_history,
+        max_history: mem.max_history,
+        summarization: mem.summarization,
+        vector_search: mem.vector_search,
       },
     };
 
@@ -250,7 +289,7 @@ export default function AgentForm({
             onChange={(e) => update("model", e.target.value)}
             className="input"
           >
-            {MODELS.map((m) => (
+            {models.map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
               </option>

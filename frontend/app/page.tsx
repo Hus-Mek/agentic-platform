@@ -32,12 +32,16 @@ interface RecentRun {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const WORKSPACE_ID = "00000000-0000-0000-0000-000000000001";
+const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID || "00000000-0000-0000-0000-000000000001";
 
-async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-  });
+// Demo token for local dev (set DEMO_TOKEN env var, or login first)
+const DEMO_TOKEN = process.env.NEXT_PUBLIC_DEMO_TOKEN || "";
+
+async function fetchJson(url: string, token?: string): Promise<any> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("token") || DEMO_TOKEN;
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   return res.json();
 }
@@ -259,7 +263,7 @@ export default function DashboardPage() {
           color="amber"
         />
         <QuickAction
-          href="/runs/abc123"
+          href="/runs"
           icon={<Activity size={20} />}
           title="View Runs"
           description="Inspect recent agent executions and traces"

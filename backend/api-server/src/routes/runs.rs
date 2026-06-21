@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::middleware::auth::Claims;
 use crate::models::{RunRow, RunStepRow};
+use crate::routes::helpers::{bad_request, internal_error, not_found};
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -13,27 +14,6 @@ pub struct RunQuery {
     pub workspace_id: Option<Uuid>,
     pub agent_id: Option<Uuid>,
     pub status: Option<String>,
-}
-
-fn internal_error<E: std::fmt::Display>(e: E) -> (axum::http::StatusCode, Json<serde_json::Value>) {
-    (
-        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        Json(serde_json::json!({"error": e.to_string()})),
-    )
-}
-
-fn not_found(msg: &str) -> (axum::http::StatusCode, Json<serde_json::Value>) {
-    (
-        axum::http::StatusCode::NOT_FOUND,
-        Json(serde_json::json!({"error": msg})),
-    )
-}
-
-fn bad_request(msg: &str) -> (axum::http::StatusCode, Json<serde_json::Value>) {
-    (
-        axum::http::StatusCode::BAD_REQUEST,
-        Json(serde_json::json!({"error": msg})),
-    )
 }
 
 pub async fn list_runs(
@@ -52,7 +32,7 @@ pub async fn list_runs(
     let runs = if let Some(agent_id) = agent_id {
         if let Some(status) = status {
             sqlx::query_as::<_, RunRow>(
-                "SELECT * FROM runs WHERE workspace_id = $1 AND agent_id = $2 AND status = $3 ORDER BY created_at DESC",
+                "SELECT id, workspace_id, agent_id, status::text AS status, input, output, error, duration_ms, total_tokens::bigint AS total_tokens, total_cost::float8 AS total_cost, created_by, created_at, updated_at FROM runs WHERE workspace_id = $1 AND agent_id = $2 AND status = $3 ORDER BY created_at DESC",
             )
             .bind(workspace_id)
             .bind(agent_id)
@@ -62,7 +42,7 @@ pub async fn list_runs(
             .map_err(internal_error)?
         } else {
             sqlx::query_as::<_, RunRow>(
-                "SELECT * FROM runs WHERE workspace_id = $1 AND agent_id = $2 ORDER BY created_at DESC",
+                "SELECT id, workspace_id, agent_id, status::text AS status, input, output, error, duration_ms, total_tokens::bigint AS total_tokens, total_cost::float8 AS total_cost, created_by, created_at, updated_at FROM runs WHERE workspace_id = $1 AND agent_id = $2 ORDER BY created_at DESC",
             )
             .bind(workspace_id)
             .bind(agent_id)
@@ -72,7 +52,7 @@ pub async fn list_runs(
         }
     } else if let Some(status) = status {
         sqlx::query_as::<_, RunRow>(
-            "SELECT * FROM runs WHERE workspace_id = $1 AND status = $2 ORDER BY created_at DESC",
+            "SELECT id, workspace_id, agent_id, status::text AS status, input, output, error, duration_ms, total_tokens::bigint AS total_tokens, total_cost::float8 AS total_cost, created_by, created_at, updated_at FROM runs WHERE workspace_id = $1 AND status = $2 ORDER BY created_at DESC",
         )
         .bind(workspace_id)
         .bind(status)
@@ -81,7 +61,7 @@ pub async fn list_runs(
         .map_err(internal_error)?
     } else {
         sqlx::query_as::<_, RunRow>(
-            "SELECT * FROM runs WHERE workspace_id = $1 ORDER BY created_at DESC",
+            "SELECT id, workspace_id, agent_id, status::text AS status, input, output, error, duration_ms, total_tokens::bigint AS total_tokens, total_cost::float8 AS total_cost, created_by, created_at, updated_at FROM runs WHERE workspace_id = $1 ORDER BY created_at DESC",
         )
         .bind(workspace_id)
         .fetch_all(&state.db)
@@ -96,7 +76,7 @@ pub async fn get_run(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<RunRow>, (axum::http::StatusCode, Json<serde_json::Value>)> {
-    let run = sqlx::query_as::<_, RunRow>("SELECT * FROM runs WHERE id = $1")
+    let run = sqlx::query_as::<_, RunRow>("SELECT id, workspace_id, agent_id, status::text AS status, input, output, error, duration_ms, total_tokens::bigint AS total_tokens, total_cost::float8 AS total_cost, created_by, created_at, updated_at FROM runs WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.db)
         .await
@@ -135,7 +115,7 @@ pub async fn cancel_run(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<serde_json::Value>)> {
-    let existing = sqlx::query_as::<_, RunRow>("SELECT * FROM runs WHERE id = $1")
+    let existing = sqlx::query_as::<_, RunRow>("SELECT id, workspace_id, agent_id, status::text AS status, input, output, error, duration_ms, total_tokens::bigint AS total_tokens, total_cost::float8 AS total_cost, created_by, created_at, updated_at FROM runs WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.db)
         .await
@@ -149,7 +129,7 @@ pub async fn cancel_run(
         )));
     }
 
-    sqlx::query("UPDATE runs SET status = 'cancelled' WHERE id = $1")
+    sqlx::query("UPDATE runs SET status = 'cancelled'::run_status WHERE id = $1")
         .bind(id)
         .execute(&state.db)
         .await
@@ -162,7 +142,7 @@ pub async fn delete_run(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<serde_json::Value>)> {
-    let existing = sqlx::query_as::<_, RunRow>("SELECT * FROM runs WHERE id = $1")
+    let existing = sqlx::query_as::<_, RunRow>("SELECT id, workspace_id, agent_id, status::text AS status, input, output, error, duration_ms, total_tokens::bigint AS total_tokens, total_cost::float8 AS total_cost, created_by, created_at, updated_at FROM runs WHERE id = $1")
         .bind(id)
         .fetch_optional(&state.db)
         .await

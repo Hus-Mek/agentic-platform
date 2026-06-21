@@ -361,7 +361,7 @@ async fn insert_run_step(
         return Ok(());
     };
     sqlx::query(
-        "INSERT INTO run_steps (id, run_id, step_type, node_name, input, output, duration_ms, tokens_used, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())",
+        "INSERT INTO run_steps (id, run_id, step_type, node_name, input, output, duration_ms, tokens_used, metadata, created_at) VALUES ($1, $2, $3::step_type, $4, $5, $6, $7, $8, $9, now())",
     )
     .bind(Uuid::new_v4())
     .bind(run_id)

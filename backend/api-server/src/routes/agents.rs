@@ -18,6 +18,7 @@ use agenticos_core::state::{AgentState, GuardConfig, MemoryConfig, Message, Tool
 use crate::middleware::auth::Claims;
 use crate::models::AgentRow;
 use crate::models::AgentVersionRow;
+use crate::routes::helpers::{bad_request, internal_error, not_found};
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -67,27 +68,6 @@ pub struct RunResponse {
 #[derive(Debug, Deserialize)]
 pub struct DeployRequest {
     pub environment: String,
-}
-
-fn internal_error<E: std::fmt::Display>(e: E) -> (axum::http::StatusCode, Json<serde_json::Value>) {
-    (
-        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        Json(serde_json::json!({"error": e.to_string()})),
-    )
-}
-
-fn not_found(msg: &str) -> (axum::http::StatusCode, Json<serde_json::Value>) {
-    (
-        axum::http::StatusCode::NOT_FOUND,
-        Json(serde_json::json!({"error": msg})),
-    )
-}
-
-fn bad_request(msg: &str) -> (axum::http::StatusCode, Json<serde_json::Value>) {
-    (
-        axum::http::StatusCode::BAD_REQUEST,
-        Json(serde_json::json!({"error": msg})),
-    )
 }
 
 pub async fn list_agents(
@@ -155,7 +135,7 @@ pub async fn create_agent(
     .bind(&tools)
     .bind(&guard_config)
     .bind(&memory_config)
-    .bind(&claims.sub)
+    .bind(claims.sub.parse::<uuid::Uuid>().ok())
     .bind(true)
     .bind(now)
     .bind(now)
@@ -208,8 +188,14 @@ pub async fn update_agent(
     let instructions = body.instructions.unwrap_or(existing.instructions);
     let model = body.model.unwrap_or(existing.model);
     let tools = body.tools.unwrap_or(existing.tools);
-    let guard_config = body.guard_config.unwrap_or(existing.guard_config);
-    let memory_config = body.memory_config.unwrap_or(existing.memory_config);
+    let guard_config = body
+        .guard_config
+        .or_else(|| existing.guard_config.clone())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let memory_config = body
+        .memory_config
+        .or_else(|| existing.memory_config.clone())
+        .unwrap_or_else(|| serde_json::json!({}));
     let now = Utc::now();
 
     sqlx::query(
@@ -252,7 +238,7 @@ pub async fn update_agent(
     .bind(id)
     .bind(next_version.0)
     .bind(&config_snapshot)
-    .bind(&claims.sub)
+    .bind(claims.sub.parse::<uuid::Uuid>().ok())
     .bind(now)
     .execute(&state.db)
     .await
@@ -353,7 +339,7 @@ pub async fn deploy_agent(
     .bind(id)
     .bind(next_version.0)
     .bind(&config_snapshot)
-    .bind(&claims.sub)
+    .bind(claims.sub.parse::<uuid::Uuid>().ok())
     .bind(now)
     .execute(&state.db)
     .await
@@ -429,7 +415,7 @@ pub async fn rollback_agent(
     .bind(id)
     .bind(next_version.0)
     .bind(&version_row.config_snapshot)
-    .bind(&claims.sub)
+    .bind(claims.sub.parse::<uuid::Uuid>().ok())
     .bind(Utc::now())
     .execute(&state.db)
     .await
@@ -463,14 +449,13 @@ pub async fn run_agent(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO runs (id, workspace_id, agent_id, status, input, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO runs (id, workspace_id, agent_id, status, input, created_by, created_at) VALUES ($1, $2, $3, 'running'::run_status, $4, $5, $6)",
     )
     .bind(run_id)
     .bind(agent.workspace_id)
     .bind(agent.id)
-    .bind("running")
     .bind(&body.input)
-    .bind(&claims.sub)
+    .bind(claims.sub.parse::<uuid::Uuid>().ok())
     .bind(now)
     .execute(&state.db)
     .await
@@ -490,11 +475,15 @@ pub async fn run_agent(
     if let Ok(tools) = serde_json::from_value::<Vec<ToolDefinition>>(agent.tools.clone()) {
         agent_state.tools = tools;
     }
-    if let Ok(gc) = serde_json::from_value::<GuardConfig>(agent.guard_config.clone()) {
-        agent_state.guard_config = gc;
+    if let Some(gc_val) = agent.guard_config.clone() {
+        if let Ok(gc) = serde_json::from_value::<GuardConfig>(gc_val) {
+            agent_state.guard_config = gc;
+        }
     }
-    if let Ok(mc) = serde_json::from_value::<MemoryConfig>(agent.memory_config.clone()) {
-        agent_state.memory_config = mc;
+    if let Some(mc_val) = agent.memory_config.clone() {
+        if let Ok(mc) = serde_json::from_value::<MemoryConfig>(mc_val) {
+            agent_state.memory_config = mc;
+        }
     }
 
     agent_state.add_message(Message::new("user", &body.input));
@@ -509,6 +498,7 @@ pub async fn run_agent(
         &state.memory_client,
         Some(&state.kb_retriever),
         &state.db,
+        None,
     )
     .await
     {
@@ -520,7 +510,7 @@ pub async fn run_agent(
                 .unwrap_or_default();
 
             sqlx::query(
-                "UPDATE runs SET status = 'completed', output = $1, duration_ms = $2, total_tokens = $3, total_cost = $4 WHERE id = $5",
+                "UPDATE runs SET status = 'completed'::run_status, output = $1, duration_ms = $2, total_tokens = $3::int, total_cost = $4::numeric WHERE id = $5::uuid",
             )
             .bind(&output)
             .bind(duration_ms)
@@ -544,7 +534,7 @@ pub async fn run_agent(
             let duration_ms = start.elapsed().as_millis() as i64;
 
             sqlx::query(
-                "UPDATE runs SET status = 'failed', error = $1, duration_ms = $2, total_tokens = $3, total_cost = $4 WHERE id = $5",
+                "UPDATE runs SET status = 'failed'::run_status, error = $1, duration_ms = $2, total_tokens = $3::int, total_cost = $4::numeric WHERE id = $5::uuid",
             )
             .bind(e.to_string())
             .bind(duration_ms)
@@ -600,14 +590,13 @@ pub async fn run_agent_stream(
     let now = Utc::now();
 
     if let Err(e) = sqlx::query(
-        "INSERT INTO runs (id, workspace_id, agent_id, status, input, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO runs (id, workspace_id, agent_id, status, input, created_by, created_at) VALUES ($1, $2, $3, 'running'::run_status, $4, $5, $6)",
     )
     .bind(run_id)
     .bind(agent.workspace_id)
     .bind(agent.id)
-    .bind("running")
     .bind(&body.input)
-    .bind(&claims.sub)
+    .bind(claims.sub.parse::<uuid::Uuid>().ok())
     .bind(now)
     .execute(&state.db)
     .await
@@ -645,15 +634,19 @@ pub async fn run_agent_stream(
         {
             agent_state.tools = tools;
         }
-        if let Ok(gc) =
-            serde_json::from_value::<GuardConfig>(agent_clone.guard_config.clone())
+        if let Some(gc_val) =
+            agent_clone.guard_config.clone()
         {
-            agent_state.guard_config = gc;
+            if let Ok(gc) = serde_json::from_value::<GuardConfig>(gc_val) {
+                agent_state.guard_config = gc;
+            }
         }
-        if let Ok(mc) =
-            serde_json::from_value::<MemoryConfig>(agent_clone.memory_config.clone())
+        if let Some(mc_val) =
+            agent_clone.memory_config.clone()
         {
-            agent_state.memory_config = mc;
+            if let Ok(mc) = serde_json::from_value::<MemoryConfig>(mc_val) {
+                agent_state.memory_config = mc;
+            }
         }
 
         agent_state.add_message(Message::new("user", &input));
@@ -678,7 +671,7 @@ pub async fn run_agent_stream(
                     .await;
 
                 let _ = sqlx::query(
-                    "UPDATE runs SET status = 'completed', output = $1, total_tokens = $2, total_cost = $3 WHERE id = $4",
+                    "UPDATE runs SET status = 'completed'::run_status, output = $1, total_tokens = $2::int, total_cost = $3::numeric WHERE id = $4::uuid",
                 )
                 .bind(
                     agent_state
@@ -686,7 +679,7 @@ pub async fn run_agent_stream(
                         .map(|m| m.content.clone())
                         .unwrap_or_default(),
                 )
-                .bind(agent_state.total_tokens_used)
+                .bind(agent_state.total_tokens_used as i32)
                 .bind(agent_state.total_cost)
                 .bind(&run_id_str)
                 .execute(&db)
@@ -698,7 +691,7 @@ pub async fn run_agent_stream(
                     .await;
 
                 let _ = sqlx::query(
-                    "UPDATE runs SET status = 'failed', error = $1 WHERE id = $2",
+                    "UPDATE runs SET status = 'failed'::run_status, error = $1 WHERE id = $2",
                 )
                 .bind(e.to_string())
                 .bind(&run_id_str)

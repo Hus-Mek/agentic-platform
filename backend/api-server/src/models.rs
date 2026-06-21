@@ -12,9 +12,9 @@ pub struct AgentRow {
     pub instructions: String,
     pub model: String,
     pub tools: serde_json::Value,
-    pub guard_config: serde_json::Value,
-    pub memory_config: serde_json::Value,
-    pub created_by: String,
+    pub guard_config: Option<serde_json::Value>,
+    pub memory_config: Option<serde_json::Value>,
+    pub created_by: Option<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -42,8 +42,9 @@ pub struct RunRow {
     pub duration_ms: Option<i64>,
     pub total_tokens: Option<i64>,
     pub total_cost: Option<f64>,
-    pub created_by: String,
+    pub created_by: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -121,7 +122,7 @@ pub struct TeamAgentRow {
     pub sub_agents: serde_json::Value,
     pub max_delegations: i32,
     pub execution_mode: String,
-    pub created_by: String,
+    pub created_by: Option<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -140,7 +141,7 @@ pub struct TeamRunRow {
     pub total_tokens: Option<i64>,
     pub total_cost: Option<f64>,
     pub duration_ms: Option<i64>,
-    pub created_by: String,
+    pub created_by: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

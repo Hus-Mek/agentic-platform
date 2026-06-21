@@ -26,7 +26,9 @@ interface Agent {
   description: string;
   instructions: string;
   model: string;
-  tools: string[];
+  tools:
+    | string[]
+    | { type: string; function: { name: string } }[];
   guard_config: {
     enabled: boolean;
     pii_redaction: boolean;
@@ -183,14 +185,22 @@ export default function AgentDetailPage() {
             </div>
             {agent.tools && agent.tools.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {agent.tools.map((tool) => (
-                  <span
-                    key={tool}
-                    className="px-2.5 py-1 rounded-lg bg-surface-800 text-xs font-mono text-surface-300"
-                  >
-                    {tool}
-                  </span>
-                ))}
+                {agent.tools.map((tool, idx) => {
+                  // Defensive: backend may store either plain strings (new format)
+                  // or OpenAI-shape wrappers (legacy once the form was wrapping them).
+                  const label =
+                    typeof tool === "string"
+                      ? tool
+                      : tool?.function?.name || tool?.name || JSON.stringify(tool);
+                  return (
+                    <span
+                      key={typeof tool === "string" ? tool : idx}
+                      className="px-2.5 py-1 rounded-lg bg-surface-800 text-xs font-mono text-surface-300"
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-surface-500">No tools configured</p>

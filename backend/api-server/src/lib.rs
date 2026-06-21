@@ -20,9 +20,14 @@ use agenticos_guards::GuardEngine;
 use agenticos_memory::MemoryClient;
 
 use agenticos_core::llm::LiteLLMClient;
+use agenticos_core::{ModelRouter, EvalHarness, model_router::ModelInfo};
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct AppState {
+    // Added ModelRouter and EvalHarness for dynamic model selection and evaluation
+    pub model_router: Arc<RwLock<ModelRouter>>, 
+    pub eval_harness: Arc<EvalHarness>,
     pub config: AppConfig,
     pub db: PgPool,
     pub llm_client: LiteLLMClient,
@@ -41,7 +46,20 @@ impl AppState {
         let memory_client = Arc::new(MemoryClient::from_config(&config).await);
         let kb_retriever = Arc::new(KbRetriever::new(db.clone(), llm_client.clone()));
         let feature_flags = Arc::new(FeatureFlags::new());
+
+        // Initialize ModelRouter with default model and register catalog
+        let mut model_router = ModelRouter::new("gpt-4o-mini".into());
+        for model in default_model_catalog() {
+            model_router.register_model(model);
+        }
+        let model_router = Arc::new(RwLock::new(model_router));
+
+        // Initialize EvalHarness
+        let eval_harness = Arc::new(EvalHarness::new());
+
         Self {
+            model_router,
+            eval_harness,
             config,
             db,
             llm_client,
@@ -52,6 +70,99 @@ impl AppState {
             feature_flags,
         }
     }
+}
+
+// Helper to provide a catalog of default models used by the ModelRouter.
+fn default_model_catalog() -> Vec<ModelInfo> {
+    use agenticos_core::model_router::{ModelInfo, ModelCapability};
+    // Live free OpenRouter slugs (verified via /api/v1/models, prompt+completion="0")
+    vec![
+        ModelInfo {
+            id: "openai/gpt-oss-120b:free".into(),
+            provider: "openai".into(),
+            capabilities: vec![
+                ModelCapability::Chat,
+                ModelCapability::FunctionCalling,
+                ModelCapability::Reasoning,
+                ModelCapability::StructuredOutput,
+                ModelCapability::LongContext,
+            ],
+            cost_input_per_million: 0.0,
+            cost_output_per_million: 0.0,
+            max_context_tokens: 131_072,
+            avg_latency_ms: 900,
+        },
+        ModelInfo {
+            id: "meta-llama/llama-3.3-70b-instruct:free".into(),
+            provider: "meta".into(),
+            capabilities: vec![
+                ModelCapability::Chat,
+                ModelCapability::FunctionCalling,
+                ModelCapability::LongContext,
+                ModelCapability::CodeGeneration,
+            ],
+            cost_input_per_million: 0.0,
+            cost_output_per_million: 0.0,
+            max_context_tokens: 131_072,
+            avg_latency_ms: 900,
+        },
+        ModelInfo {
+            id: "qwen/qwen3-coder:free".into(),
+            provider: "qwen".into(),
+            capabilities: vec![
+                ModelCapability::Chat,
+                ModelCapability::FunctionCalling,
+                ModelCapability::CodeGeneration,
+                ModelCapability::LongContext,
+            ],
+            cost_input_per_million: 0.0,
+            cost_output_per_million: 0.0,
+            max_context_tokens: 1_048_576,
+            avg_latency_ms: 700,
+        },
+        ModelInfo {
+            id: "google/gemma-4-31b-it:free".into(),
+            provider: "google".into(),
+            capabilities: vec![
+                ModelCapability::Chat,
+                ModelCapability::FunctionCalling,
+                ModelCapability::Vision,
+                ModelCapability::LongContext,
+                ModelCapability::StructuredOutput,
+            ],
+            cost_input_per_million: 0.0,
+            cost_output_per_million: 0.0,
+            max_context_tokens: 262_144,
+            avg_latency_ms: 600,
+        },
+        ModelInfo {
+            id: "nvidia/nemotron-3-super-120b-a12b:free".into(),
+            provider: "nvidia".into(),
+            capabilities: vec![
+                ModelCapability::Chat,
+                ModelCapability::FunctionCalling,
+                ModelCapability::Reasoning,
+                ModelCapability::LongContext,
+            ],
+            cost_input_per_million: 0.0,
+            cost_output_per_million: 0.0,
+            max_context_tokens: 1_000_000,
+            avg_latency_ms: 1100,
+        },
+        ModelInfo {
+            id: "openrouter/owl-alpha".into(),
+            provider: "openrouter".into(),
+            capabilities: vec![
+                ModelCapability::Chat,
+                ModelCapability::FunctionCalling,
+                ModelCapability::Cheap,
+            ],
+            cost_input_per_million: 0.0,
+            cost_output_per_million: 0.0,
+            max_context_tokens: 1_048_576,
+            avg_latency_ms: 1200,
+        },
+    ]
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -117,8 +228,13 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/features/{flag}/enable", post(routes::features::enable_feature))
         .route("/api/features/{flag}/disable", post(routes::features::disable_feature))
         .route("/api/approvals", get(routes::approval::list_approvals))
-        .route("/api/approvals/{id}/approve", post(routes::approval::approve_request))
-        .route("/api/approvals/{id}/reject", post(routes::approval::reject_request))
+                .route("/api/approvals/{id}/approve", post(routes::approval::approve_request))
+                .route("/api/approvals/{id}/reject", post(routes::approval::reject_request))
+        .route("/api/models", get(routes::models::list_models))
+                .route("/api/models/route", post(routes::models::route_model))
+                .route("/api/eval/metrics", get(routes::eval::list_metrics))
+                .route("/api/eval/score", post(routes::eval::score))
+                .route("/api/eval/benchmark", post(routes::eval::run_benchmark))
         .route("/api/workspaces/{id}/usage", get(routes::usage::get_usage))
         .route("/api/workspaces/{id}/usage/summary", get(routes::usage::get_usage_summary))
         .layer(from_fn_with_state(

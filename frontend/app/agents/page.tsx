@@ -21,7 +21,15 @@ interface Agent {
   created_at: string;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const FILTERS = ["All", "active", "inactive"];
+
+function getAuthToken(): string | null {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("token");
+  }
+  return null;
+}
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -31,21 +39,18 @@ export default function AgentsPage() {
   const [activeFilter, setActiveFilter] = useState("All");
 
   useEffect(() => {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    fetch(`${baseUrl}/api/agents`)
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch(`${API_URL}/api/agents`, { headers })
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch agents: ${res.status}`);
         return res.json();
       })
-      .then((data: Agent[]) => {
-        setAgents(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
+      .then((data: Agent[]) => setAgents(data))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = agents.filter((agent) => {
@@ -152,37 +157,9 @@ function AgentCard({ agent }: { agent: Agent }) {
       <h3 className="text-sm font-semibold text-white mb-1 group-hover:text-brand-400 transition-colors">
         {agent.name}
       </h3>
-      <p className="text-xs text-surface-400 line-clamp-2 mb-3">
-        {agent.description}
-      </p>
+      <p className="text-xs text-surface-400 line-clamp-2 mb-3">{agent.description}</p>
       <div className="flex items-center gap-3 text-xs text-surface-500 mb-3">
-        <span className="px-2 py-0.5 rounded bg-surface-800 font-mono">
-          {agent.model}
-        </span>
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-            agent.status === "active"
-              ? "bg-green-500/10 text-green-400"
-              : "bg-surface-700 text-surface-400"
-          }`}
-        >
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              agent.status === "active"
-                ? "bg-green-400 animate-pulse-slow"
-                : "bg-surface-500"
-            }`}
-          />
-          {agent.status}
-        </span>
-      </div>
-      <div className="flex items-center pt-3 border-t border-surface-800">
-        <div className="flex items-center gap-1.5 text-xs text-surface-500">
-          <Clock size={12} />
-          {agent.created_at
-            ? new Date(agent.created_at).toLocaleDateString()
-            : "N/A"}
-        </div>
+        <span className="px-2 py-0.5 rounded bg-surface-800 font-mono">{agent.model}</span>
       </div>
     </Link>
   );
@@ -199,31 +176,21 @@ function EmptyState({
     return (
       <div className="card p-12 text-center">
         <p className="text-surface-400 mb-2">No agents match your search</p>
-        <p className="text-xs text-surface-500">
-          Try a different search term or filter
-        </p>
       </div>
     );
   }
 
-  if (agentsEmpty) {
-    return (
-      <div className="card p-12 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-surface-800 flex items-center justify-center mx-auto mb-4">
-          <Sparkles size={28} className="text-surface-500" />
-        </div>
-        <h3 className="text-lg font-semibold text-white mb-2">No agents yet</h3>
-        <p className="text-surface-400 text-sm mb-6 max-w-md mx-auto">
-          Create your first AI agent to get started. Agents can be configured with
-          custom instructions, tools, guardrails, and memory.
-        </p>
-        <Link href="/agents/new" className="btn-primary">
-          <Plus size={16} />
-          Create Your First Agent
-        </Link>
-      </div>
-    );
-  }
-
-  return null;
+  return (
+    <div className="card p-12 text-center">
+      <Sparkles size={28} className="text-surface-500" />
+      <h3 className="text-lg font-semibold text-white mb-2">No agents yet</h3>
+      <p className="text-surface-400 text-sm mb-6 max-w-md mx-auto">
+        Create your first AI agent to get started.
+      </p>
+      <Link href="/agents/new" className="btn-primary">
+        <Plus size={16} />
+        Create Your First Agent
+      </Link>
+    </div>
+  );
 }
