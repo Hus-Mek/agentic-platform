@@ -24,7 +24,7 @@ pub async fn get_usage(
     Query(query): Query<UsageQuery>,
 ) -> Result<Json<Vec<Value>>, (axum::http::StatusCode, Json<Value>)> {
     let rows = sqlx::query_as::<_, (NaiveDate, i64, f64, i32)>(
-        "SELECT date, total_tokens, total_cost, request_count FROM workspace_usage WHERE workspace_id = $1 AND ($2::DATE IS NULL OR date >= $2::DATE) AND ($3::DATE IS NULL OR date <= $3::DATE) ORDER BY date DESC",
+        "SELECT date, total_tokens, total_cost::float8, request_count FROM workspace_usage WHERE workspace_id = $1 AND ($2::DATE IS NULL OR date >= $2::DATE) AND ($3::DATE IS NULL OR date <= $3::DATE) ORDER BY date DESC",
     )
     .bind(id)
     .bind(query.start_date)
@@ -55,7 +55,7 @@ pub async fn get_usage_summary(
 ) -> Result<Json<Value>, (axum::http::StatusCode, Json<Value>)> {
     let today = Utc::now().date_naive();
     let row = sqlx::query_as::<_, (NaiveDate, i64, f64, i32)>(
-        "SELECT date, total_tokens, total_cost, request_count FROM workspace_usage WHERE workspace_id = $1 AND date = $2"
+        "SELECT date, total_tokens, total_cost::float8, request_count FROM workspace_usage WHERE workspace_id = $1 AND date = $2"
     )
     .bind(id)
     .bind(today)

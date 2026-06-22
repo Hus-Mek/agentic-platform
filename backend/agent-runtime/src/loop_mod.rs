@@ -464,7 +464,7 @@ async fn record_workspace_usage(
     let today = chrono::Utc::now().date_naive();
 
     let existing = sqlx::query_as::<_, (i64, f64, i32)>(
-        "SELECT total_tokens, total_cost, request_count FROM workspace_usage WHERE workspace_id = $1 AND date = $2"
+        "SELECT total_tokens, total_cost::float8, request_count FROM workspace_usage WHERE workspace_id = $1 AND date = $2"
     )
     .bind(workspace_id)
     .bind(today)

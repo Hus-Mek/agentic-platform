@@ -14,7 +14,7 @@ pub struct AgentRow {
     pub tools: serde_json::Value,
     pub guard_config: Option<serde_json::Value>,
     pub memory_config: Option<serde_json::Value>,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -26,7 +26,7 @@ pub struct AgentVersionRow {
     pub agent_id: Uuid,
     pub version_number: i32,
     pub config_snapshot: serde_json::Value,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -42,7 +42,7 @@ pub struct RunRow {
     pub duration_ms: Option<i64>,
     pub total_tokens: Option<i64>,
     pub total_cost: Option<f64>,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -89,7 +89,7 @@ pub struct KbDocumentRow {
     pub content_type: Option<String>,
     pub content: Option<String>,
     pub metadata: Option<serde_json::Value>,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -123,7 +123,7 @@ pub struct TeamAgentRow {
     pub sub_agents: serde_json::Value,
     pub max_delegations: i32,
     pub execution_mode: String,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -142,7 +142,7 @@ pub struct TeamRunRow {
     pub total_tokens: Option<i64>,
     pub total_cost: Option<f64>,
     pub duration_ms: Option<i64>,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -155,7 +155,7 @@ pub struct PipelineRow {
     pub description: Option<String>,
     pub version: String,
     pub graph: serde_json::Value,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -167,7 +167,7 @@ pub struct PipelineVersionRow {
     pub pipeline_id: Uuid,
     pub version_number: i32,
     pub config_snapshot: serde_json::Value,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -183,7 +183,7 @@ pub struct PipelineRunRow {
     pub duration_ms: Option<i64>,
     pub total_tokens: i32,
     pub total_cost: f64,
-    pub created_by: Option<String>,
+    pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
