@@ -13,6 +13,7 @@ pub mod prompt_builder;
 pub mod rag;
 pub mod recovery;
 pub mod responder;
+pub mod route;
 pub mod sandbox;
 pub mod wasm_sandbox;
 pub mod streaming;

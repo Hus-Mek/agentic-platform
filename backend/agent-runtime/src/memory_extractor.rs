@@ -1,6 +1,25 @@
 use agenticos_core::llm::LiteLLMClient;
+use agenticos_core::model_router::ModelRouter;
 use agenticos_core::state::Message;
 use serde::{Deserialize, Serialize};
+
+/// Resilient (retry + fallback) completion shared by the extractors.
+async fn extractor_chat(
+    llm_client: &LiteLLMClient,
+    model: &str,
+    router: Option<&ModelRouter>,
+    messages: &[Message],
+) -> agenticos_core::error::Result<agenticos_core::llm::LlmResponse> {
+    crate::route::route_chat_completion(
+        llm_client,
+        model,
+        messages,
+        &[],
+        router,
+        &crate::route::RouteOptions::resilient(),
+    )
+    .await
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExtractedFact {
@@ -24,6 +43,7 @@ pub async fn extract_facts(
     messages: &[Message],
     llm_client: &LiteLLMClient,
     model: &str,
+    router: Option<&ModelRouter>,
 ) -> Vec<String> {
     let conversation = messages
         .iter()
@@ -53,10 +73,7 @@ Conversation:
         Message::new("user", &prompt),
     ];
 
-    match llm_client
-        .chat_completion(model, &messages, &[])
-        .await
-    {
+    match extractor_chat(llm_client, model, router, &messages).await {
         Ok(response) => {
             let content = response.content.unwrap_or_default();
             match serde_json::from_str::<FactExtractionResponse>(&content) {
@@ -87,6 +104,7 @@ pub async fn extract_procedure(
     messages: &[Message],
     llm_client: &LiteLLMClient,
     model: &str,
+    router: Option<&ModelRouter>,
 ) -> Option<String> {
     let tool_interactions: Vec<String> = messages
         .iter()
@@ -125,10 +143,7 @@ Tool usage history:
         Message::new("user", &prompt),
     ];
 
-    match llm_client
-        .chat_completion(model, &messages, &[])
-        .await
-    {
+    match extractor_chat(llm_client, model, router, &messages).await {
         Ok(response) => {
             let content = response.content.unwrap_or_default();
             match serde_json::from_str::<ProcedureExtractionResponse>(&content) {

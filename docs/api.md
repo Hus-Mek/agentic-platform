@@ -176,7 +176,14 @@ Query parameters for list endpoints:
 | Field   | Type   | Required | Description                          |
 |---------|--------|----------|--------------------------------------|
 | `input` | string | yes      | User message to send to agent        |
-| `model` | string | no       | Override agent's default model       |
+| `model` | string | no       | Override agent's default model. Use the sentinel value `"auto"` to enable the **Matchmaker** — the router picks a model per step from the catalog based on task complexity and remaining token budget. |
+
+> **Model routing & resilience.** Every LLM call (agent reasoning, summarization,
+> responder, memory extraction, and pipeline Model nodes) is wrapped by the
+> router: transient failures (network/timeout, 408/409/429/5xx) are retried with
+> exponential backoff, then the call falls back through the configured model
+> chain, and finally trips a circuit breaker. Resilience is always on; model
+> *selection* (`"auto"`) is opt-in per run.
 
 **Response `200`:**
 

@@ -66,13 +66,20 @@ pub struct GuardDesign {
 pub struct Architect {
     llm_client: LiteLLMClient,
     model: String,
+    router: Option<agenticos_core::model_router::ModelRouter>,
 }
 
 
 
 impl Architect {
     pub fn new(llm_client: LiteLLMClient, model: String) -> Self {
-        Self { llm_client, model }
+        Self { llm_client, model, router: None }
+    }
+
+    /// Attach a router catalog so design calls gain fallback resilience.
+    pub fn with_router(mut self, router: Option<agenticos_core::model_router::ModelRouter>) -> Self {
+        self.router = router;
+        self
     }
 
     pub async fn design(&self, request: &ArchitectRequest) -> Result<ArchitectResponse, ArchitectError> {
@@ -82,10 +89,16 @@ impl Architect {
             Message::new("user", &prompt),
         ];
 
-        let response = self.llm_client
-            .chat_completion(&self.model, &messages, &[])
-            .await
-            .map_err(|e| ArchitectError::LlmError(e.to_string()))?;
+        let response = crate::route::route_chat_completion(
+            &self.llm_client,
+            &self.model,
+            &messages,
+            &[],
+            self.router.as_ref(),
+            &crate::route::RouteOptions::resilient(),
+        )
+        .await
+        .map_err(|e| ArchitectError::LlmError(e.to_string()))?;
 
         let content = response.content.unwrap_or_default();
 

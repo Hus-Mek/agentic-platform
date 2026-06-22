@@ -172,7 +172,7 @@ async fn test_06_memory_extractor_calls_llm() {
         Message::new("assistant", "Nice to meet you Bob! How can I help you today?"),
     ];
 
-    let facts = memory_extractor::extract_facts(&messages, &llm, TEST_MODEL).await;
+    let facts = memory_extractor::extract_facts(&messages, &llm, TEST_MODEL, None).await;
     println!("PASS: Extracted {} facts: {:?}", facts.len(), facts);
 }
 
@@ -191,7 +191,7 @@ async fn test_07_procedure_extraction() {
         Message::new("assistant", "Based on the search, GPT-5 was released."),
     ];
 
-    let procedure = memory_extractor::extract_procedure(&messages, &llm, TEST_MODEL).await;
+    let procedure = memory_extractor::extract_procedure(&messages, &llm, TEST_MODEL, None).await;
     assert!(procedure.is_some(), "Procedure extraction returned None");
     println!("PASS: Extracted procedure: {:?}", procedure.unwrap());
 }

@@ -64,6 +64,8 @@ pub struct ExecutionContext<'a> {
     pub cancel: Option<Arc<AtomicBool>>,
     /// Optional live event sink.
     pub tx: Option<mpsc::Sender<PipelineStreamEvent>>,
+    /// Optional router catalog giving Model nodes fallback resilience.
+    pub router: Option<agenticos_core::model_router::ModelRouter>,
 }
 
 /// Result of a full pipeline run: the execution snapshot plus rolled-up cost.
@@ -253,11 +255,16 @@ async fn execute_node(
         NodeType::Model { model_id, prompt_template } => {
             let prompt = render_template(prompt_template, resolved);
             let messages = vec![Message::new("user", &prompt)];
-            let resp = ctx
-                .llm_client
-                .chat_completion(model_id, &messages, &[])
-                .await
-                .map_err(|e| PipelineError::LlmError(e.to_string()))?;
+            let resp = crate::route::route_chat_completion(
+                ctx.llm_client,
+                model_id,
+                &messages,
+                &[],
+                ctx.router.as_ref(),
+                &crate::route::RouteOptions::resilient(),
+            )
+            .await
+            .map_err(|e| PipelineError::LlmError(e.to_string()))?;
             let content = resp.content.unwrap_or_default();
             Ok(NodeRun {
                 outputs: vec![out("response", DataType::Text, Value::String(content))],
@@ -358,6 +365,10 @@ async fn execute_agent_node(
         &agent.instructions,
         &agent.model,
     );
+    if let Some(router) = ctx.router.clone() {
+        // Agent nodes keep their explicit model; the router adds fallback resilience.
+        agent_state = agent_state.with_router(router, false);
+    }
     if let Ok(tools) = serde_json::from_value::<Vec<ToolDefinition>>(agent.tools.clone()) {
         agent_state.tools = tools;
     }

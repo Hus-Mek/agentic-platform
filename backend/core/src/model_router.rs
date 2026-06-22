@@ -54,7 +54,11 @@ impl TaskComplexity {
     }
 }
 
+/// Below this many tokens remaining, the router biases toward cheap models.
+const LOW_BUDGET_TOKENS: i64 = 5_000;
+
 /// The dynamic model router
+#[derive(Debug, Clone)]
 pub struct ModelRouter {
     models: HashMap<String, ModelInfo>,
     default_model: String,
@@ -78,12 +82,16 @@ impl ModelRouter {
         self.fallback_chain = chain;
     }
 
-    /// Select the best model for a given task
+    /// Select the best model for a given task.
+    ///
+    /// Scoring combines capability/complexity fit with a budget bias: when
+    /// `token_budget_remaining` is low, cheap models are favored and expensive
+    /// ones penalized so a near-exhausted budget degrades gracefully.
     pub fn select_model(
         &self,
         complexity: TaskComplexity,
         required_capabilities: &[ModelCapability],
-        _token_budget_remaining: Option<i64>,
+        token_budget_remaining: Option<i64>,
     ) -> String {
         let candidates: Vec<&ModelInfo> = self.models
             .values()
@@ -95,16 +103,30 @@ impl ModelRouter {
             return self.default_model.clone();
         }
 
+        let low_budget = token_budget_remaining
+            .map(|b| (0..LOW_BUDGET_TOKENS).contains(&b))
+            .unwrap_or(false);
+
         let best = candidates
             .into_iter()
             .max_by(|a, b| {
-                let score_a = score_model(a, complexity);
-                let score_b = score_model(b, complexity);
+                let score_a = score_model(a, complexity) + budget_bonus(a, low_budget);
+                let score_b = score_model(b, complexity) + budget_bonus(b, low_budget);
                 score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
             })
             .unwrap_or_else(|| self.models.get(&self.default_model).unwrap());
 
         best.id.clone()
+    }
+
+    /// The configured fallback chain, in priority order.
+    pub fn fallback_chain(&self) -> &[String] {
+        &self.fallback_chain
+    }
+
+    /// The default model used when no better match is found.
+    pub fn default_model(&self) -> &str {
+        &self.default_model
     }
 
     pub fn get_fallback(&self, model_id: &str) -> Option<String> {
@@ -126,6 +148,20 @@ impl ModelRouter {
             input_cost + output_cost
         })
     }
+}
+
+/// Budget-driven score adjustment: when the remaining budget is low, reward
+/// cheap models and penalize expensive ones; otherwise a no-op.
+fn budget_bonus(model: &ModelInfo, low_budget: bool) -> f64 {
+    if !low_budget {
+        return 0.0;
+    }
+    let mut bonus = 0.0;
+    if model.capabilities.contains(&ModelCapability::Cheap) {
+        bonus += 5.0;
+    }
+    bonus -= model.cost_input_per_million;
+    bonus
 }
 
 fn score_model(model: &ModelInfo, complexity: TaskComplexity) -> f64 {
@@ -204,6 +240,27 @@ mod tests {
         for model in test_models() { router.register_model(model); }
         let model = router.select_model(TaskComplexity::Complex, &[ModelCapability::Chat, ModelCapability::Reasoning], None);
         assert_eq!(model, "claude-sonnet-4");
+    }
+
+    #[test]
+    fn test_low_budget_prefers_cheap_model() {
+        let mut router = ModelRouter::new("gpt-4o".into());
+        for model in test_models() { router.register_model(model); }
+        // Complex task, but only Chat required so all three qualify.
+        let caps = [ModelCapability::Chat];
+        // Ample budget -> the high-capability complex model wins.
+        let ample = router.select_model(TaskComplexity::Complex, &caps, Some(1_000_000));
+        assert_eq!(ample, "claude-sonnet-4");
+        // Near-exhausted budget -> the cheap model wins despite lower fit.
+        let tight = router.select_model(TaskComplexity::Complex, &caps, Some(100));
+        assert_eq!(tight, "gpt-4o-mini");
+    }
+
+    #[test]
+    fn test_fallback_chain_accessor() {
+        let mut router = ModelRouter::new("a".into());
+        router.set_fallback_chain(vec!["a".into(), "b".into()]);
+        assert_eq!(router.fallback_chain(), &["a".to_string(), "b".to_string()]);
     }
 
     #[test]

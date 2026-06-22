@@ -28,11 +28,18 @@ pub struct ContextSummarizer {
     llm_client: LiteLLMClient,
     model: String,
     config: SummarizerConfig,
+    router: Option<agenticos_core::model_router::ModelRouter>,
 }
 
 impl ContextSummarizer {
     pub fn new(llm_client: LiteLLMClient, model: String, config: SummarizerConfig) -> Self {
-        Self { llm_client, model, config }
+        Self { llm_client, model, config, router: None }
+    }
+
+    /// Attach a router catalog so summarization gains fallback resilience.
+    pub fn with_router(mut self, router: Option<agenticos_core::model_router::ModelRouter>) -> Self {
+        self.router = router;
+        self
     }
 
     /// Check if messages need summarization
@@ -104,10 +111,16 @@ Summary:"#,
             Message::new("user", &prompt),
         ];
 
-        let response = self.llm_client
-            .chat_completion(&self.model, &messages, &[])
-            .await
-            .map_err(|e| SummarizerError::LlmError(e.to_string()))?;
+        let response = crate::route::route_chat_completion(
+            &self.llm_client,
+            &self.model,
+            &messages,
+            &[],
+            self.router.as_ref(),
+            &crate::route::RouteOptions::resilient(),
+        )
+        .await
+        .map_err(|e| SummarizerError::LlmError(e.to_string()))?;
 
         let summary = response.content.unwrap_or_default();
 

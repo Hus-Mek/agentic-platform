@@ -359,6 +359,7 @@ async fn run_inner(
             &state.messages,
             llm_client,
             &state.model,
+            state.router.as_ref(),
         )
         .await;
 
@@ -376,6 +377,7 @@ async fn run_inner(
                 &state.messages,
                 llm_client,
                 &state.model,
+                state.router.as_ref(),
             )
             .await
             {
@@ -395,7 +397,8 @@ async fn run_inner(
             .map(|m| m.content.clone())
             .unwrap_or_default();
         if !last_output.is_empty() {
-            let responder = Responder::new(llm_client.clone(), state.model.clone());
+            let responder = Responder::new(llm_client.clone(), state.model.clone())
+                .with_router(state.router.clone());
             match responder.validate_and_fix(&last_output, schema).await {
                 Ok(fixed) => {
                     if fixed != last_output {

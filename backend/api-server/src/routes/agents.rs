@@ -463,14 +463,24 @@ pub async fn run_agent(
 
     let model = body.model.as_deref().unwrap_or(&agent.model);
 
+    // Matchmaker: a model of "auto" opts the agent into per-step router selection.
+    let router_snapshot = state.model_router.read().await.clone();
+    let auto_route = model.eq_ignore_ascii_case("auto");
+    let base_model = if auto_route {
+        router_snapshot.default_model().to_string()
+    } else {
+        model.to_string()
+    };
+
     let mut agent_state = AgentState::new(
         Some(agent.id.to_string()),
         Some(run_id.to_string()),
         Some(agent.workspace_id.to_string()),
         Some(claims.sub.clone()),
         &agent.instructions,
-        model,
-    );
+        &base_model,
+    )
+    .with_router(router_snapshot, auto_route);
 
     if let Ok(tools) = serde_json::from_value::<Vec<ToolDefinition>>(agent.tools.clone()) {
         agent_state.tools = tools;
@@ -620,14 +630,24 @@ pub async fn run_agent_stream(
     tokio::spawn(async move {
         let model = &agent_clone.model;
 
+        // Matchmaker: a model of "auto" opts the agent into per-step router selection.
+        let router_snapshot = state_for_task.model_router.read().await.clone();
+        let auto_route = model.eq_ignore_ascii_case("auto");
+        let base_model = if auto_route {
+            router_snapshot.default_model().to_string()
+        } else {
+            model.to_string()
+        };
+
         let mut agent_state = AgentState::new(
             Some(agent_clone.id.to_string()),
             Some(run_id_str.clone()),
             Some(agent_clone.workspace_id.to_string()),
             Some(claims_clone.sub.clone()),
             &agent_clone.instructions,
-            model,
-        );
+            &base_model,
+        )
+        .with_router(router_snapshot, auto_route);
 
         if let Ok(tools) =
             serde_json::from_value::<Vec<ToolDefinition>>(agent_clone.tools.clone())

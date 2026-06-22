@@ -339,6 +339,7 @@ pub async fn run_pipeline(
     let run_id = insert_pipeline_run(&state, &row, &body.data, &claims).await?;
     let run_input = PipelineRunInput { pipeline_id: id.to_string(), data: body.data };
 
+    let router_snapshot = state.model_router.read().await.clone();
     let ctx = ExecutionContext {
         llm_client: &state.llm_client,
         tool_registry: &state.tool_registry,
@@ -351,6 +352,7 @@ pub async fn run_pipeline(
         pipeline_run_id: run_id,
         cancel: None,
         tx: None,
+        router: Some(router_snapshot),
     };
 
     let start = std::time::Instant::now();
@@ -420,6 +422,7 @@ pub async fn run_pipeline_stream(
 
     tokio::spawn(async move {
         let run_input = PipelineRunInput { pipeline_id: id.to_string(), data };
+        let router_snapshot = state_task.model_router.read().await.clone();
         let ctx = ExecutionContext {
             llm_client: &state_task.llm_client,
             tool_registry: &state_task.tool_registry,
@@ -432,6 +435,7 @@ pub async fn run_pipeline_stream(
             pipeline_run_id: run_id,
             cancel: None,
             tx: Some(tx),
+            router: Some(router_snapshot),
         };
 
         let start = std::time::Instant::now();

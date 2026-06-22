@@ -154,6 +154,15 @@ pub struct AgentState {
     pub metadata: HashMap<String, serde_json::Value>,
     pub iteration: u32,
     pub max_iterations: u32,
+    /// Catalog snapshot used by the Matchmaker/Router. Runtime-only (never
+    /// serialized); populated from the app-level `ModelRouter` at run start.
+    #[serde(skip)]
+    pub router: Option<crate::model_router::ModelRouter>,
+    /// When true, the router selects the model per-step from `router`'s catalog
+    /// based on task complexity + remaining budget. When false, `model` is used
+    /// as-is (resilience — retry/fallback — still applies).
+    #[serde(default)]
+    pub auto_route: bool,
 }
 
 impl AgentState {
@@ -188,7 +197,16 @@ impl AgentState {
             metadata: HashMap::new(),
             iteration: 0,
             max_iterations: 25,
+            router: None,
+            auto_route: false,
         }
+    }
+
+    /// Enable Matchmaker model selection with the given catalog snapshot.
+    pub fn with_router(mut self, router: crate::model_router::ModelRouter, auto_route: bool) -> Self {
+        self.router = Some(router);
+        self.auto_route = auto_route;
+        self
     }
 
     pub fn add_message(&mut self, msg: Message) {

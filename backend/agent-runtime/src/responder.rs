@@ -7,11 +7,34 @@ use tracing;
 pub struct Responder {
     llm_client: LiteLLMClient,
     model: String,
+    router: Option<agenticos_core::model_router::ModelRouter>,
 }
 
 impl Responder {
     pub fn new(llm_client: LiteLLMClient, model: String) -> Self {
-        Self { llm_client, model }
+        Self { llm_client, model, router: None }
+    }
+
+    /// Attach a router catalog so Responder calls gain fallback resilience.
+    pub fn with_router(mut self, router: Option<agenticos_core::model_router::ModelRouter>) -> Self {
+        self.router = router;
+        self
+    }
+
+    /// Resilient chat completion (retry + fallback) used by all Responder calls.
+    async fn chat(
+        &self,
+        messages: &[Message],
+    ) -> agenticos_core::error::Result<agenticos_core::llm::LlmResponse> {
+        crate::route::route_chat_completion(
+            &self.llm_client,
+            &self.model,
+            messages,
+            &[],
+            self.router.as_ref(),
+            &crate::route::RouteOptions::resilient(),
+        )
+        .await
     }
 
     /// Validate and potentially fix agent output
@@ -46,8 +69,7 @@ impl Responder {
                         )),
                     ];
 
-                    let response = self.llm_client
-                        .chat_completion(&self.model, &messages, &[])
+                    let response = self.chat(&messages)
                         .await
                         .map_err(|e| ResponderError::LlmError(e.to_string()))?;
 
@@ -69,11 +91,7 @@ impl Responder {
             ),
             Message::new("user", &format!("Question: {query}\n\nContent: {content}")),
         ];
-        match self
-            .llm_client
-            .chat_completion(&self.model, &messages, &[])
-            .await
-        {
+        match self.chat(&messages).await {
             Ok(r) => r.content.unwrap_or_default(),
             Err(e) => {
                 tracing::warn!(error = %e, "Responder::format LLM call failed");
@@ -94,11 +112,7 @@ impl Responder {
             ),
             Message::new("user", text),
         ];
-        match self
-            .llm_client
-            .chat_completion(&self.model, &messages, &[])
-            .await
-        {
+        match self.chat(&messages).await {
             Ok(r) => r.content.unwrap_or_default(),
             Err(e) => {
                 tracing::warn!(error = %e, "Responder::summarize LLM call failed");

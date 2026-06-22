@@ -115,6 +115,7 @@ fn ctx<'a>(h: &'a Harness) -> ExecutionContext<'a> {
         pipeline_run_id: Uuid::new_v4(),
         cancel: None,
         tx: None,
+        router: None,
     }
 }
 

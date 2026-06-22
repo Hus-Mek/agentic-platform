@@ -162,13 +162,25 @@ pub async fn plan_step(
 
     let tool_defs: Vec<ToolDefinition> = state.tools.clone();
 
-    let response = llm_client
-        .chat_completion(&state.model, &api_messages, &tool_defs)
-        .await
-        .map_err(|e| {
-            state.consecutive_errors += 1;
-            anyhow::anyhow!("LLM call failed: {}", e)
-        })?;
+    let opts = crate::route::RouteOptions {
+        auto_route: state.auto_route,
+        required_capabilities: &[],
+        token_budget_remaining: Some((state.token_budget - state.total_tokens_used).max(0)),
+        ..Default::default()
+    };
+    let response = crate::route::route_chat_completion(
+        llm_client,
+        &state.model,
+        &api_messages,
+        &tool_defs,
+        state.router.as_ref(),
+        &opts,
+    )
+    .await
+    .map_err(|e| {
+        state.consecutive_errors += 1;
+        anyhow::anyhow!("LLM call failed: {}", e)
+    })?;
 
     state.total_tokens_used += response.usage.total_tokens as i64;
     state.total_cost += response.usage.cost;
