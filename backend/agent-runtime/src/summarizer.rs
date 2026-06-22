@@ -148,7 +148,8 @@ mod tests {
     #[test]
     fn test_needs_summarization_long() {
         let config = SummarizerConfig::default();
-        let long_content = "a".repeat(8000);
+        // token_threshold is 6000 (~24k chars at 4 chars/token); exceed it comfortably.
+        let long_content = "a".repeat(30000);
         let messages = vec![
             Message::new("system", "You are helpful"),
             Message::new("user", &long_content),

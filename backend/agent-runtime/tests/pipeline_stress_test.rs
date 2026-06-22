@@ -199,7 +199,7 @@ async fn test_07_procedure_extraction() {
 #[tokio::test]
 async fn test_08_responder_formats_output() {
     let llm = build_llm_client().await;
-    let responder = Responder::new(llm, TEST_MODEL);
+    let responder = Responder::new(llm, TEST_MODEL.to_string());
 
     let formatted = responder.format(
         "the capital of france is paris. it has population of 2.1 million.",
@@ -212,7 +212,7 @@ async fn test_08_responder_formats_output() {
 #[tokio::test]
 async fn test_09_responder_summarizes() {
     let llm = build_llm_client().await;
-    let responder = Responder::new(llm, TEST_MODEL);
+    let responder = Responder::new(llm, TEST_MODEL.to_string());
     let long_text = "Alice said she prefers dark mode. Bob said he works at Acme Corp. \
                      Both agreed on the project timeline. The deadline is next Friday. \
                      They decided to use Python for the backend and React for the frontend. \

@@ -43,7 +43,15 @@ async fn build_test_app() -> Router {
         agenticos_agent_runtime::KbRetriever::new(db.clone(), llm_client.clone()),
     );
 
+    let model_router = Arc::new(tokio::sync::RwLock::new(
+        agenticos_core::ModelRouter::new("gpt-4o".into()),
+    ));
+    let eval_harness = Arc::new(agenticos_core::EvalHarness::new());
+    let feature_flags = Arc::new(agenticos_core::features::FeatureFlags::new());
+
     let state = AppState {
+        model_router,
+        eval_harness,
         config,
         db,
         llm_client,
@@ -51,6 +59,7 @@ async fn build_test_app() -> Router {
         guard_engine,
         memory_client,
         kb_retriever,
+        feature_flags,
     };
 
     create_router(state)
@@ -592,9 +601,9 @@ async fn test_model_row_serialization() {
         instructions: "Do things".into(),
         model: "gpt-4o".into(),
         tools: json!([]),
-        guard_config: json!({}),
-        memory_config: json!({}),
-        created_by: "test-user".into(),
+        guard_config: Some(json!({})),
+        memory_config: Some(json!({})),
+        created_by: Some("test-user".into()),
         is_active: true,
         created_at: now,
         updated_at: now,
@@ -624,8 +633,9 @@ async fn test_run_row_serialization() {
         duration_ms: Some(1000),
         total_tokens: Some(50),
         total_cost: Some(0.001),
-        created_by: "user".into(),
+        created_by: Some("user".into()),
         created_at: now,
+        updated_at: now,
     };
 
     let json = serde_json::to_value(&row).unwrap();
@@ -652,7 +662,7 @@ async fn test_team_agent_row_serialization() {
         sub_agents: json!([]),
         max_delegations: 10,
         execution_mode: "Sequential".into(),
-        created_by: "user".into(),
+        created_by: Some("user".into()),
         is_active: true,
         created_at: now,
         updated_at: now,

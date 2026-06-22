@@ -10,18 +10,13 @@ async fn test_health_endpoint() {
         }
     };
     let pool = sqlx::PgPool::connect(&db_url).await.expect("Failed to connect to DB");
-    sqlx::migrate!("./infra/migrations").run(&pool).await.ok();
+    sqlx::migrate!("../migrations").run(&pool).await.ok();
     let state = agenticos_api_server::AppState::new(config, pool).await;
     let app = agenticos_api_server::create_router(state);
     let req = axum::http::Request::builder()
         .uri("/health")
         .body(axum::body::Body::empty())
         .unwrap();
-    let resp = tower::ServiceExt::ready(&mut app.into_service())
-        .await
-        .unwrap()
-        .call(req)
-        .await
-        .unwrap();
+    let resp = tower::ServiceExt::oneshot(app, req).await.unwrap();
     assert_eq!(resp.status(), 200);
 }

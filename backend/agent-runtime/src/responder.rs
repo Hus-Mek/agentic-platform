@@ -59,6 +59,54 @@ impl Responder {
         Err(ResponderError::MaxRetriesExceeded(schema.max_retries))
     }
 
+    /// Reformat raw content into a clean, direct answer to the user's query.
+    pub async fn format(&self, content: &str, query: &str) -> String {
+        let messages = vec![
+            Message::new(
+                "system",
+                "Rewrite the provided content as a clear, well-structured answer to the \
+                 user's question. Return only the answer, no preamble.",
+            ),
+            Message::new("user", &format!("Question: {query}\n\nContent: {content}")),
+        ];
+        match self
+            .llm_client
+            .chat_completion(&self.model, &messages, &[])
+            .await
+        {
+            Ok(r) => r.content.unwrap_or_default(),
+            Err(e) => {
+                tracing::warn!(error = %e, "Responder::format LLM call failed");
+                String::new()
+            }
+        }
+    }
+
+    /// Summarize `text` to approximately `max_chars` characters.
+    pub async fn summarize(&self, text: &str, max_chars: usize) -> String {
+        let messages = vec![
+            Message::new(
+                "system",
+                &format!(
+                    "Summarize the user's text in under {max_chars} characters. \
+                     Return only the summary."
+                ),
+            ),
+            Message::new("user", text),
+        ];
+        match self
+            .llm_client
+            .chat_completion(&self.model, &messages, &[])
+            .await
+        {
+            Ok(r) => r.content.unwrap_or_default(),
+            Err(e) => {
+                tracing::warn!(error = %e, "Responder::summarize LLM call failed");
+                String::new()
+            }
+        }
+    }
+
     fn build_fix_prompt(
         &self,
         original: &str,
