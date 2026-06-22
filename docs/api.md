@@ -619,6 +619,84 @@ Restores the agent's config to the specified version and creates a new version s
 
 ---
 
+## Workflows (Pipelines)
+
+The Workflow Designer persists and runs multi-step DAGs ("pipelines"). A pipeline
+is a graph of typed nodes; running one is a *run* — node-level trace is written to
+the shared `run_steps` table (keyed by `pipeline_run_id`) and token/cost roll into
+`workspace_usage` exactly like agent runs.
+
+### Node types
+
+| Type       | Binding                                                        |
+|------------|---------------------------------------------------------------|
+| `Input`    | Entry point; receives values from the run `data` map          |
+| `Output`   | Collects all incoming values into the final result            |
+| `Model`    | Calls the LLM via the LiteLLM client (never the metered API)  |
+| `Agent`    | Invokes a saved agent (`agent_id`) with its tools/guards      |
+| `Team`     | Invokes a saved team (`team_id`) supervisor + sub-agents      |
+| `Script`   | Runs a WASM module in the wasmtime sandbox (fuel/mem/epoch limited) |
+| `Decision` | Evaluates a simple condition (`"score > 50"`)                 |
+| `Router`   | Passes the incoming value through to connected nodes          |
+| `Metric`   | Scores output vs. an `expected` value (full eval is a roadmap item) |
+
+The `graph` JSONB stores `{ nodes, edges }` plus a UI-only `layout` key the engine
+ignores. `node_type` is an externally-tagged enum, e.g.
+`{"Model": {"model_id": "gpt-4o", "prompt_template": "{{input}}"}}`.
+
+**Script node:** `code` carries a WAT or wasm-text module executed in a wasmtime
+sandbox with **no WASI, no network, no host imports**. Per-node `config` keys
+`fuel`, `memory_bytes`, and `wall_ms` bound CPU, memory, and wall-clock. (Authoring
+scripts in JavaScript via a QuickJS-on-wasm front-end is a planned follow-up;
+sub-pipeline nesting and per-node guard policies are out of scope for v1.)
+
+### Endpoints
+
+| Method & path                                  | Description                          |
+|------------------------------------------------|--------------------------------------|
+| `GET /api/pipelines`                           | List pipelines (workspace-scoped)    |
+| `POST /api/pipelines`                          | Create (validates the DAG first)     |
+| `GET /api/pipelines/{id}`                      | Get a pipeline                       |
+| `PUT /api/pipelines/{id}`                      | Update (snapshots the prior version) |
+| `DELETE /api/pipelines/{id}`                   | Soft delete                          |
+| `POST /api/pipelines/{id}/validate`            | `{ ok, errors[] }`                   |
+| `POST /api/pipelines/{id}/run`                 | Run synchronously → run summary      |
+| `POST /api/pipelines/{id}/run-stream`          | Run with SSE node-level events       |
+| `GET /api/pipelines/{id}/runs`                 | List runs for a pipeline             |
+| `GET /api/pipelines/{id}/versions`             | List config-snapshot versions        |
+| `POST /api/pipelines/{id}/deploy`              | Snapshot a version                   |
+| `POST /api/pipelines/{id}/rollback/{version}`  | Restore a prior version              |
+| `GET /api/pipeline-runs/{id}`                  | Get a run + execution snapshot       |
+| `GET /api/pipeline-runs/{id}/steps`            | Per-node trace steps                 |
+| `POST /api/pipeline-runs/{id}/cancel`          | Cancel a pending/running run         |
+
+**Run request body:** `{ "data": { "input": "..." } }` — keys map to `Input`
+nodes by node id or input name.
+
+**SSE events** (`run-stream`): `{type:"node_started"|"node_completed"|"node_failed"|"done"|"error", ...}`.
+
+**Create example:**
+
+```json
+POST /api/pipelines
+{
+  "name": "Summarize",
+  "graph": {
+    "nodes": [
+      {"id":"in","name":"Input","node_type":"Input","inputs":[{"name":"input","data_type":"Any","value":null,"source_node":null}],"outputs":[],"config":{}},
+      {"id":"m","name":"Model","node_type":{"Model":{"model_id":"gpt-4o","prompt_template":"Summarize: {{input}}"}},"inputs":[{"name":"input","data_type":"Any","value":null,"source_node":"in"}],"outputs":[],"config":{}},
+      {"id":"out","name":"Output","node_type":"Output","inputs":[{"name":"response","data_type":"Any","value":null,"source_node":"m"}],"outputs":[],"config":{}}
+    ],
+    "edges": [
+      {"id":"e1","source_node":"in","source_output":"output","target_node":"m","target_input":"input"},
+      {"id":"e2","source_node":"m","source_output":"output","target_node":"out","target_input":"response"}
+    ]
+  }
+}
+```
+
+---
+
 ## Knowledge Bases
 
 ### `GET /api/knowledge-bases` — List knowledge bases

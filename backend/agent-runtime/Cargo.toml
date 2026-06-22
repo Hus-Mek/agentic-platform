@@ -19,3 +19,4 @@ sqlx = { workspace = true }
 async-trait = "0.1"
 futures = { workspace = true }
 thiserror = { workspace = true }
+wasmtime = { workspace = true }

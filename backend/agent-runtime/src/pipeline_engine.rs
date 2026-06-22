@@ -189,6 +189,22 @@ fn execute_node(
                 value: serde_json::json!(0.85),
             }])
         }
+        NodeType::Agent { agent_id } => {
+            // Real invocation happens in the async pipeline_executor; the sync
+            // engine only echoes a placeholder for in-memory/back-compat use.
+            Ok(vec![NodeOutput {
+                name: "response".into(),
+                data_type: DataType::Text,
+                value: serde_json::json!(format!("[Agent {} invoked]", agent_id)),
+            }])
+        }
+        NodeType::Team { team_id } => {
+            Ok(vec![NodeOutput {
+                name: "response".into(),
+                data_type: DataType::Text,
+                value: serde_json::json!(format!("[Team {} invoked]", team_id)),
+            }])
+        }
         NodeType::Output => {
             let value = serde_json::Value::Object(
                 inputs.iter()

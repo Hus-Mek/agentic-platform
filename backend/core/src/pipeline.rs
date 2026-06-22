@@ -78,6 +78,14 @@ pub enum NodeType {
     Metric {
         metric_type: String,
     },
+    /// Invokes an existing saved agent by id
+    Agent {
+        agent_id: String,
+    },
+    /// Invokes an existing saved team (supervisor + sub-agents) by id
+    Team {
+        team_id: String,
+    },
     /// Collects and returns final results
     Output,
 }

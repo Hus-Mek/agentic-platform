@@ -132,7 +132,7 @@ pub struct EvalTask {
 }
 
 /// Result of running an eval task
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalResult {
     pub task_id: String,
     pub success: bool,

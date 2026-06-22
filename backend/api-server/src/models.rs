@@ -50,7 +50,8 @@ pub struct RunRow {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct RunStepRow {
     pub id: Uuid,
-    pub run_id: Uuid,
+    pub run_id: Option<Uuid>,
+    pub pipeline_run_id: Option<Uuid>,
     pub step_type: String,
     pub node_name: Option<String>,
     pub input: Option<String>,
@@ -141,6 +142,47 @@ pub struct TeamRunRow {
     pub total_tokens: Option<i64>,
     pub total_cost: Option<f64>,
     pub duration_ms: Option<i64>,
+    pub created_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PipelineRow {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub version: String,
+    pub graph: serde_json::Value,
+    pub created_by: Option<String>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PipelineVersionRow {
+    pub id: Uuid,
+    pub pipeline_id: Uuid,
+    pub version_number: i32,
+    pub config_snapshot: serde_json::Value,
+    pub created_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PipelineRunRow {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub pipeline_id: Option<Uuid>,
+    pub status: String,
+    pub input: Option<serde_json::Value>,
+    pub execution: Option<serde_json::Value>,
+    pub error: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub total_tokens: i32,
+    pub total_cost: f64,
     pub created_by: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

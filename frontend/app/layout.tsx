@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Bot,
   Activity,
+  Workflow,
   Menu,
   X,
 } from "lucide-react";
@@ -51,6 +52,9 @@ function Navbar() {
               </NavLink>
               <NavLink href="/agents" icon={<Bot size={16} />}>
                 Agents
+              </NavLink>
+              <NavLink href="/workflows" icon={<Workflow size={16} />}>
+                Workflows
               </NavLink>
               <NavLink href="/runs" icon={<Activity size={16} />}>
                 Runs

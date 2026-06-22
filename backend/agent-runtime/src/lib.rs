@@ -8,11 +8,13 @@ pub mod orchestrator;
 pub mod plan;
 pub mod plan_executor;
 pub mod pipeline_engine;
+pub mod pipeline_executor;
 pub mod prompt_builder;
 pub mod rag;
 pub mod recovery;
 pub mod responder;
 pub mod sandbox;
+pub mod wasm_sandbox;
 pub mod streaming;
 pub mod summarizer;
 pub mod tool;
@@ -27,6 +29,9 @@ pub use orchestrator::{collect_team_stats, create_delegate_tool, TeamOrchestrato
 pub use plan::{LiteLLMClient, LlmResponse, LlmUsage, PlanResult, PlanStep, PlanStepStatus, PlanExecution};
 pub use plan_executor::execute_plan;
 pub use pipeline_engine::{PipelineEngine, PipelineError};
+pub use pipeline_executor::{
+    execute_pipeline, ExecutionContext, PipelineRunOutcome, PipelineStreamEvent,
+};
 pub use responder::{Responder, ResponderError};
 pub use summarizer::{ContextSummarizer, SummarizerConfig, SummarizerError};
 pub use architect::{Architect, ArchitectRequest, ArchitectResponse, ArchitectError, TeamDesign, SubAgentDesign, PipelineDesign, PipelineStepDesign, GuardDesign};

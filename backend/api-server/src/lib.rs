@@ -201,6 +201,26 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/team-runs/{id}", get(routes::teams::get_team_run))
         .route("/api/runs/{id}/steps", get(routes::runs::get_run_steps))
         .route("/api/runs/{id}/cancel", post(routes::runs::cancel_run))
+        .route(
+            "/api/pipelines",
+            get(routes::pipelines::list_pipelines).post(routes::pipelines::create_pipeline),
+        )
+        .route(
+            "/api/pipelines/{id}",
+            get(routes::pipelines::get_pipeline)
+                .put(routes::pipelines::update_pipeline)
+                .delete(routes::pipelines::delete_pipeline),
+        )
+        .route("/api/pipelines/{id}/validate", post(routes::pipelines::validate_pipeline_handler))
+        .route("/api/pipelines/{id}/run", post(routes::pipelines::run_pipeline))
+        .route("/api/pipelines/{id}/run-stream", post(routes::pipelines::run_pipeline_stream))
+        .route("/api/pipelines/{id}/runs", get(routes::pipelines::list_pipeline_runs))
+        .route("/api/pipelines/{id}/versions", get(routes::pipelines::list_pipeline_versions))
+        .route("/api/pipelines/{id}/deploy", post(routes::pipelines::deploy_pipeline))
+        .route("/api/pipelines/{id}/rollback/{version}", post(routes::pipelines::rollback_pipeline))
+        .route("/api/pipeline-runs/{id}", get(routes::pipelines::get_pipeline_run))
+        .route("/api/pipeline-runs/{id}/steps", get(routes::pipelines::get_pipeline_run_steps))
+        .route("/api/pipeline-runs/{id}/cancel", post(routes::pipelines::cancel_pipeline_run))
         .route("/api/workspaces", get(routes::workspaces::list_workspaces).post(routes::workspaces::create_workspace))
         .route(
             "/api/workspaces/{id}",

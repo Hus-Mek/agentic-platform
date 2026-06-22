@@ -1,6 +1,10 @@
 pub mod agents;
 pub mod auth;
+pub mod eval;
+pub mod helpers;
 pub mod kb;
+pub mod models;
+pub mod pipelines;
 pub mod runs;
 pub mod teams;
 pub mod workspaces;

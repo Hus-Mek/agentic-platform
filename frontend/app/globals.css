@@ -92,3 +92,32 @@
     @apply text-surface-400 hover:text-surface-200 border-b-2 border-transparent hover:border-surface-600 transition-colors;
   }
 }
+
+/* React Flow (workflow canvas) — dark theme to match brand/surface palette */
+.react-flow {
+  --xy-background-color: #020617;
+  --xy-edge-stroke: #475569;
+  --xy-edge-stroke-selected: #6366f1;
+  --xy-connectionline-stroke: #6366f1;
+}
+.react-flow__edge-path {
+  stroke: #475569;
+  stroke-width: 1.5;
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #6366f1;
+}
+.react-flow__handle {
+  border: none;
+}
+.react-flow__controls-button {
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  color: #cbd5e1;
+}
+.react-flow__controls-button:hover {
+  background: #1e293b;
+}
+.react-flow__attribution {
+  display: none;
+}

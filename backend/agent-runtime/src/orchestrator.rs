@@ -158,7 +158,7 @@ impl TeamOrchestrator {
                                         sub_state.add_message(Message::new("user", &task));
 
                                         let _ = crate::loop_mod::run_agent(
-                                            &mut sub_state, &llm, &reg, &ge, &mem, None, &pool,
+                                            &mut sub_state, &llm, &reg, &ge, &mem, None, &pool, None,
                                         )
                                         .await;
 
@@ -467,6 +467,7 @@ impl TeamOrchestrator {
             self.memory_client.as_ref(),
             None,
             &self.db,
+            None,
         )
         .await;
 
